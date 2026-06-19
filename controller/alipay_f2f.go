@@ -473,7 +473,7 @@ func verifyAlipayF2FParams(params map[string]string) error {
 func canonicalAlipayF2FParams(params map[string]string) string {
 	keys := make([]string, 0, len(params))
 	for key, value := range params {
-		if key == "sign" || key == "sign_type" || value == "" {
+		if key == "sign" || value == "" {
 			continue
 		}
 		keys = append(keys, key)
