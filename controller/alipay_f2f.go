@@ -143,7 +143,7 @@ type alipayF2FPreCreateResponse struct {
 type alipayF2FCheckoutPageData struct {
 	TradeNo       string
 	Money         string
-	QRCodeDataURL string
+	QRCodeDataURL template.URL
 	StatusURLJS   template.JS
 	ReturnURLJS   template.JS
 }
@@ -246,7 +246,7 @@ func AlipayF2FCheckout(c *gin.Context) {
 	_ = alipayF2FCheckoutTemplate.Execute(c.Writer, alipayF2FCheckoutPageData{
 		TradeNo:       tradeNo,
 		Money:         money,
-		QRCodeDataURL: qrDataURL,
+		QRCodeDataURL: template.URL(qrDataURL),
 		StatusURLJS:   template.JS(jsonString(statusURL)),
 		ReturnURLJS:   template.JS(jsonString(returnURL)),
 	})
