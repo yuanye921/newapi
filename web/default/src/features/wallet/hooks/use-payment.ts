@@ -32,10 +32,20 @@ import {
   isWaffoPancakePayment,
   submitPaymentForm,
 } from '../lib'
+import type { ApiResponse } from '../types'
 
 // ============================================================================
 // Payment Hook
 // ============================================================================
+
+function formatApiError(response: ApiResponse): string | undefined {
+  if (typeof response.data === 'string' && response.data.trim()) {
+    return response.message && response.message !== 'error'
+      ? `${response.message}: ${response.data}`
+      : response.data
+  }
+  return response.message
+}
 
 export function usePayment() {
   const [amount, setAmount] = useState<number>(0)
@@ -95,7 +105,9 @@ export function usePayment() {
             })
 
         if (!isApiSuccess(response)) {
-          toast.error(response.message || i18next.t('Payment request failed'))
+          toast.error(
+            formatApiError(response) || i18next.t('Payment request failed')
+          )
           return false
         }
 

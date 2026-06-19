@@ -37,6 +37,7 @@ export type UpdateOptionRequest = {
 export type UpdateOptionResponse = {
   success: boolean
   message: string
+  data?: unknown
 }
 
 export type ConfirmPaymentComplianceResponse = {

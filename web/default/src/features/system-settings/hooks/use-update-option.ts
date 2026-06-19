@@ -38,6 +38,18 @@ const STATUS_RELATED_KEYS = [
   'general_setting.custom_currency_exchange_rate',
 ]
 
+function formatApiError(data: {
+  message?: string
+  data?: unknown
+}): string | undefined {
+  if (typeof data.data === 'string' && data.data.trim()) {
+    return data.message && data.message !== 'error'
+      ? `${data.message}: ${data.data}`
+      : data.data
+  }
+  return data.message
+}
+
 export function useUpdateOption() {
   const queryClient = useQueryClient()
 
@@ -60,7 +72,9 @@ export function useUpdateOption() {
 
         toast.success(i18next.t('Setting updated successfully'))
       } else {
-        toast.error(data.message || i18next.t('Failed to update setting'))
+        toast.error(
+          formatApiError(data) || i18next.t('Failed to update setting')
+        )
       }
     },
     onError: (error: Error) => {
