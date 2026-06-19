@@ -443,7 +443,7 @@ func signAlipayF2FParams(params map[string]string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	signContent := canonicalAlipayF2FParams(params)
+	signContent := canonicalAlipayF2FParams(params, true)
 	hashType, digest := alipayF2FDigest(signContent, params["sign_type"])
 	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, hashType, digest)
 	if err != nil {
@@ -465,15 +465,18 @@ func verifyAlipayF2FParams(params map[string]string) error {
 	if err != nil {
 		return err
 	}
-	signContent := canonicalAlipayF2FParams(params)
+	signContent := canonicalAlipayF2FParams(params, false)
 	hashType, digest := alipayF2FDigest(signContent, params["sign_type"])
 	return rsa.VerifyPKCS1v15(publicKey, hashType, digest, signBytes)
 }
 
-func canonicalAlipayF2FParams(params map[string]string) string {
+func canonicalAlipayF2FParams(params map[string]string, includeSignType bool) string {
 	keys := make([]string, 0, len(params))
 	for key, value := range params {
 		if key == "sign" || value == "" {
+			continue
+		}
+		if !includeSignType && key == "sign_type" {
 			continue
 		}
 		keys = append(keys, key)
