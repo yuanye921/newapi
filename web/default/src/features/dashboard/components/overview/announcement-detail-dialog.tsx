@@ -63,7 +63,7 @@ export function AnnouncementDetailModal({
             {announcement?.content && (
               <div>
                 <h4 className='mb-2 font-medium'>{t('Content')}</h4>
-                <Markdown>{announcement.content}</Markdown>
+                <Markdown preserveLineBreaks>{announcement.content}</Markdown>
               </div>
             )}
             {announcement?.extra && (
@@ -71,7 +71,10 @@ export function AnnouncementDetailModal({
                 <h4 className='mb-2 font-medium'>
                   {t('Additional Information')}
                 </h4>
-                <Markdown className='text-muted-foreground'>
+                <Markdown
+                  preserveLineBreaks
+                  className='text-muted-foreground'
+                >
                   {announcement.extra}
                 </Markdown>
               </div>

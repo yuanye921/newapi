@@ -24,9 +24,14 @@ import { cn } from '@/lib/utils'
 interface MarkdownProps {
   children: string
   className?: string
+  preserveLineBreaks?: boolean
 }
 
-export function Markdown({ children, className }: MarkdownProps) {
+export function Markdown({
+  children,
+  className,
+  preserveLineBreaks,
+}: MarkdownProps) {
   return (
     <div
       className={cn(
@@ -44,6 +49,7 @@ export function Markdown({ children, className }: MarkdownProps) {
         'prose-img:rounded-lg prose-img:shadow-sm',
         '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
         '[overflow-wrap:anywhere] break-words',
+        preserveLineBreaks && 'whitespace-pre-line',
         className
       )}
     >
