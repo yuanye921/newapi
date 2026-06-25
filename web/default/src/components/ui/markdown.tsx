@@ -25,7 +25,6 @@ import { cn } from '@/lib/utils'
 
 interface MarkdownProps {
   children: string
-  allowStyleTags?: boolean
   className?: string
   preserveLineBreaks?: boolean
 }
@@ -128,11 +127,6 @@ const allowedTags = [
 const sanitizeOptions = {
   ADD_ATTR: allowedAttributes,
   ADD_TAGS: allowedTags,
-} as const
-
-const sanitizeOptionsWithStyleTags = {
-  ADD_ATTR: allowedAttributes,
-  ADD_TAGS: [...allowedTags, 'style'],
 } as const
 
 type FlowNode = {
@@ -701,21 +695,15 @@ function addExternalLinkAttributes(html: string): string {
   return template.innerHTML
 }
 
-function renderMarkdown(markdown: string, allowStyleTags = false): string {
+function renderMarkdown(markdown: string): string {
   const parsedHtml = markdownParser.parse(markdown, markdownOptions)
-  const html = DOMPurify.sanitize(
-    parsedHtml,
-    allowStyleTags ? sanitizeOptionsWithStyleTags : sanitizeOptions
-  )
+  const html = DOMPurify.sanitize(parsedHtml, sanitizeOptions)
 
   return addExternalLinkAttributes(html)
 }
 
 export function Markdown(props: MarkdownProps) {
-  const html = useMemo(
-    () => renderMarkdown(props.children, props.allowStyleTags),
-    [props.children, props.allowStyleTags]
-  )
+  const html = useMemo(() => renderMarkdown(props.children), [props.children])
 
   return (
     <div

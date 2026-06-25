@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import DOMPurify from 'dompurify'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { Markdown } from '@/components/ui/markdown'
@@ -23,6 +25,66 @@ import { PublicLayout } from '@/components/layout'
 import { Footer } from '@/components/layout/components/footer'
 import { CTA, Features, Hero, HowItWorks, Stats } from './components'
 import { useHomePageContent } from './hooks'
+
+const styleTagPattern = /<style\b[^>]*>([\s\S]*?)<\/style>/gi
+
+const customHomeSanitizeOptions = {
+  ADD_ATTR: ['class', 'style', 'target'],
+} as const
+
+function hasEmbeddedStyles(content: string): boolean {
+  return /<style\b/i.test(content)
+}
+
+function addExternalLinkAttributes(html: string): string {
+  if (typeof window === 'undefined') {
+    return html
+  }
+
+  const template = document.createElement('template')
+  template.innerHTML = html
+
+  template.content.querySelectorAll('a[href]').forEach((link) => {
+    link.setAttribute('target', '_blank')
+    link.setAttribute('rel', 'noopener noreferrer')
+  })
+
+  return template.innerHTML
+}
+
+function CustomHomeContent({ content }: { content: string }) {
+  const renderedContent = useMemo(() => {
+    const styles: string[] = []
+    const htmlWithoutStyles = content.replace(
+      styleTagPattern,
+      (_match, css: string) => {
+        styles.push(css)
+        return ''
+      }
+    )
+    const sanitizedHtml = DOMPurify.sanitize(
+      htmlWithoutStyles,
+      customHomeSanitizeOptions
+    )
+
+    return {
+      html: addExternalLinkAttributes(sanitizedHtml),
+      styles: styles.join('\n'),
+    }
+  }, [content])
+
+  return (
+    <>
+      {renderedContent.styles && (
+        <style data-custom-home-content>{renderedContent.styles}</style>
+      )}
+      <div
+        className='custom-home-content'
+        dangerouslySetInnerHTML={{ __html: renderedContent.html }}
+      />
+    </>
+  )
+}
 
 export function Home() {
   const { t } = useTranslation()
@@ -52,9 +114,11 @@ export function Home() {
             />
           ) : (
             <div className='container mx-auto py-8'>
-              <Markdown allowStyleTags className='custom-home-content'>
-                {content}
-              </Markdown>
+              {hasEmbeddedStyles(content) ? (
+                <CustomHomeContent content={content} />
+              ) : (
+                <Markdown className='custom-home-content'>{content}</Markdown>
+              )}
             </div>
           )}
         </main>
