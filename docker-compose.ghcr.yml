@@ -1,5 +1,4 @@
 services:
-  newapi-app:
+  newapi:
     image: ghcr.io/m16399510-lab/newapi:latest
     pull_policy: always
-
