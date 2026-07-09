@@ -6,5 +6,15 @@ import "math"
 // rounding. Every tiered billing path (pre-consume, settlement, breakdown
 // validation, log fields) MUST use this function to avoid +-1 discrepancies.
 func QuotaRound(f float64) int {
-	return int(math.Round(f))
+	r := math.Round(f)
+	if math.IsNaN(r) {
+		return 0
+	}
+	if r >= math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if r <= math.MinInt32 {
+		return math.MinInt32
+	}
+	return int(r)
 }
