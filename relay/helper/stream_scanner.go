@@ -50,11 +50,15 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	info.StreamStatus = relaycommon.NewStreamStatus()
 
 	// 确保响应体总是被关闭
-	defer func() {
-		if resp.Body != nil {
-			resp.Body.Close()
-		}
-	}()
+	var closeRespBodyOnce sync.Once
+	closeRespBody := func() {
+		closeRespBodyOnce.Do(func() {
+			if resp.Body != nil {
+				resp.Body.Close()
+			}
+		})
+	}
+	defer closeRespBody()
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
 
@@ -88,6 +92,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	defer func() {
 		// 通知所有 goroutine 停止
 		common.SafeSendBool(stopChan, true)
+		closeRespBody()
 
 		ticker.Stop()
 		if pingTicker != nil {

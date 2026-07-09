@@ -1,15 +1,15 @@
 package volcengine
 
 import (
-	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
@@ -154,7 +154,7 @@ func handleTTSResponse(c *gin.Context, resp *http.Response, info *relaycommon.Re
 	defer resp.Body.Close()
 
 	var volcResp VolcengineTTSResponse
-	if unmarshalErr := json.Unmarshal(body, &volcResp); unmarshalErr != nil {
+	if unmarshalErr := common.Unmarshal(body, &volcResp); unmarshalErr != nil {
 		return nil, types.NewErrorWithStatusCode(
 			errors.New("failed to parse volcengine response"),
 			types.ErrorCodeBadResponseBody,
@@ -209,7 +209,7 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 	header := http.Header{}
 	header.Set("Authorization", fmt.Sprintf("Bearer;%s", token))
 
-	conn, resp, dialErr := websocket.DefaultDialer.DialContext(context.Background(), requestURL, header)
+	conn, resp, dialErr := websocket.DefaultDialer.DialContext(c.Request.Context(), requestURL, header)
 	if dialErr != nil {
 		if resp != nil {
 			return nil, types.NewErrorWithStatusCode(
@@ -224,9 +224,26 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 			http.StatusBadGateway,
 		)
 	}
-	defer conn.Close()
+	var closeConnOnce sync.Once
+	closeConn := func() {
+		closeConnOnce.Do(func() {
+			_ = conn.Close()
+		})
+	}
+	stopCloseWatcher := make(chan struct{})
+	go func() {
+		select {
+		case <-c.Request.Context().Done():
+			closeConn()
+		case <-stopCloseWatcher:
+		}
+	}()
+	defer func() {
+		close(stopCloseWatcher)
+		closeConn()
+	}()
 
-	payload, marshalErr := json.Marshal(volcRequest)
+	payload, marshalErr := common.Marshal(volcRequest)
 	if marshalErr != nil {
 		return nil, types.NewErrorWithStatusCode(
 			fmt.Errorf("failed to marshal request: %w", marshalErr),
@@ -247,9 +264,19 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 	c.Header("Content-Type", contentType)
 	c.Header("Transfer-Encoding", "chunked")
 
+messageLoop:
 	for {
+		select {
+		case <-c.Request.Context().Done():
+			break messageLoop
+		default:
+		}
+
 		msg, recvErr := ReceiveMessage(conn)
 		if recvErr != nil {
+			if c.Request.Context().Err() != nil {
+				break
+			}
 			if websocket.IsCloseError(recvErr, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				break
 			}
@@ -272,6 +299,9 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 		case MsgTypeAudioOnlyServer:
 			if len(msg.Payload) > 0 {
 				if _, writeErr := c.Writer.Write(msg.Payload); writeErr != nil {
+					if c.Request.Context().Err() != nil {
+						break messageLoop
+					}
 					return nil, types.NewErrorWithStatusCode(
 						fmt.Errorf("failed to write audio data: %w", writeErr),
 						types.ErrorCodeBadResponse,
