@@ -257,11 +257,7 @@ func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types
 }
 
 func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types.NewAPIError, *dto.Usage) {
-	parentCtx := context.Background()
-	if info.ShouldCancelUpstreamOnClientGone() {
-		parentCtx = c.Request.Context()
-	}
-	ctx, cancel := newAwsInvokeContext(parentCtx)
+	ctx, cancel := newAwsInvokeContext(c.Request.Context())
 	defer cancel()
 
 	awsResp, err := a.AwsClient.InvokeModelWithResponseStream(ctx, a.AwsReq.(*bedrockruntime.InvokeModelWithResponseStreamInput))
@@ -279,6 +275,13 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 	stopCloseWatcher := make(chan struct{})
 	go func() {
 		select {
+		case <-c.Request.Context().Done():
+			if info.StreamStatus == nil {
+				info.StreamStatus = relaycommon.NewStreamStatus()
+			}
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+			cancel()
+			closeStream()
 		case <-ctx.Done():
 			closeStream()
 		case <-stopCloseWatcher:
@@ -317,6 +320,15 @@ streamLoop:
 			info.SetFirstResponseTime()
 			respErr := claude.HandleStreamResponseData(c, info, claudeInfo, string(v.Value.Bytes))
 			if respErr != nil {
+				if c.Request.Context().Err() != nil {
+					if info.StreamStatus == nil {
+						info.StreamStatus = relaycommon.NewStreamStatus()
+					}
+					info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+					cancel()
+					closeStream()
+					break streamLoop
+				}
 				return respErr, nil
 			}
 		case *bedrockruntimeTypes.UnknownUnionMember:
