@@ -31,6 +31,16 @@ const (
 	WebSearchMaxUsesHigh   = 10
 )
 
+// NormalizeClaudeSamplingParams keeps Claude requests from sending mutually exclusive sampling controls.
+func NormalizeClaudeSamplingParams(request *dto.ClaudeRequest) {
+	if request == nil {
+		return
+	}
+	if request.Temperature != nil && request.TopP != nil {
+		request.TopP = nil
+	}
+}
+
 func stopReasonClaude2OpenAI(reason string) string {
 	return reasonmap.ClaudeStopReasonToOpenAIFinishReason(reason)
 }
@@ -206,6 +216,8 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 			claudeRequest.Model = trimmedModel
 		}
 	}
+
+	NormalizeClaudeSamplingParams(&claudeRequest)
 
 	if textRequest.ReasoningEffort != "" {
 		switch textRequest.ReasoningEffort {

@@ -41,6 +41,11 @@ type Adaptor struct {
 	ResponseFormat string
 }
 
+func isClaudeLikeModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	return strings.Contains(model, "claude-")
+}
+
 func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeminiChatRequest) (any, error) {
 	// 使用 service.GeminiToOpenAIRequest 转换请求格式
 	openaiRequest, err := service.GeminiToOpenAIRequest(request, info)
@@ -230,6 +235,10 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, header *http.Header, info *
 func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
+	}
+	if request.Temperature != nil && request.TopP != nil &&
+		(isClaudeLikeModel(info.UpstreamModelName) || isClaudeLikeModel(request.Model)) {
+		request.TopP = nil
 	}
 	if info.ChannelType != constant.ChannelTypeOpenAI && info.ChannelType != constant.ChannelTypeAzure {
 		request.StreamOptions = nil

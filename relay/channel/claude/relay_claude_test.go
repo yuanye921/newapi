@@ -278,6 +278,27 @@ func TestBuildOpenAIStyleUsageFromClaudeUsageDefaultsAggregateCacheCreationTo5m(
 	require.Equal(t, 0, openAIUsage.ClaudeCacheCreation1hTokens)
 }
 
+func TestRequestOpenAI2ClaudeMessage_DropsTopPWhenTemperatureIsSet(t *testing.T) {
+	request := dto.GeneralOpenAIRequest{
+		Model:       "claude-opus-4-6",
+		Temperature: commonPointer(0.7),
+		TopP:        commonPointer(0.9),
+		Messages: []dto.Message{
+			{
+				Role:    "user",
+				Content: "hello",
+			},
+		},
+	}
+
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+
+	require.NoError(t, err)
+	require.NotNil(t, claudeRequest.Temperature)
+	require.Equal(t, 0.7, *claudeRequest.Temperature)
+	require.Nil(t, claudeRequest.TopP)
+}
+
 func TestRequestOpenAI2ClaudeMessage_ClaudeOpus48HighUsesAdaptiveThinking(t *testing.T) {
 	request := dto.GeneralOpenAIRequest{
 		Model:       "claude-opus-4-8-high",
