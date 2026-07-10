@@ -257,7 +257,11 @@ func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types
 }
 
 func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types.NewAPIError, *dto.Usage) {
-	ctx, cancel := newAwsInvokeContext(c.Request.Context())
+	parentCtx := context.Background()
+	if info.ShouldCancelUpstreamOnClientGone() {
+		parentCtx = c.Request.Context()
+	}
+	ctx, cancel := newAwsInvokeContext(parentCtx)
 	defer cancel()
 
 	awsResp, err := a.AwsClient.InvokeModelWithResponseStream(ctx, a.AwsReq.(*bedrockruntime.InvokeModelWithResponseStreamInput))

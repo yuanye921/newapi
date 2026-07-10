@@ -43,17 +43,24 @@ func applyUpstreamContentLength(req *http.Request, info *common.RelayInfo) {
 }
 
 func upstreamRequestContext(c *gin.Context, info *common.RelayInfo) context.Context {
-	if c != nil && c.Request != nil && info != nil && (info.IsStream || info.RelayMode == constant.RelayModeRealtime) {
+	if shouldCancelUpstreamOnClientGone(c, info) {
 		return c.Request.Context()
 	}
 	return context.Background()
+}
+
+func shouldCancelUpstreamOnClientGone(c *gin.Context, info *common.RelayInfo) bool {
+	if c == nil || c.Request == nil {
+		return false
+	}
+	return info.ShouldCancelUpstreamOnClientGone()
 }
 
 func attachClientCancelForStreaming(c *gin.Context, req *http.Request, info *common.RelayInfo) *http.Request {
 	if req == nil {
 		return req
 	}
-	if c != nil && c.Request != nil && info != nil && (info.IsStream || info.RelayMode == constant.RelayModeRealtime) {
+	if shouldCancelUpstreamOnClientGone(c, info) {
 		return req.WithContext(c.Request.Context())
 	}
 	return req

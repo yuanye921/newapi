@@ -188,6 +188,16 @@ type RelayInfo struct {
 	*TaskRelayInfo
 }
 
+func (info *RelayInfo) ShouldCancelUpstreamOnClientGone() bool {
+	if info == nil {
+		return false
+	}
+	if info.RelayMode == relayconstant.RelayModeRealtime {
+		return true
+	}
+	return info.IsStream && !info.PriceData.UsePrice
+}
+
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	channelType := common.GetContextKeyInt(c, constant.ContextKeyChannelType)
 	paramOverride := common.GetContextKeyStringMap(c, constant.ContextKeyChannelParamOverride)

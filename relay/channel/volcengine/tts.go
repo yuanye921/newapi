@@ -1,6 +1,7 @@
 package volcengine
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -209,7 +210,11 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 	header := http.Header{}
 	header.Set("Authorization", fmt.Sprintf("Bearer;%s", token))
 
-	conn, resp, dialErr := websocket.DefaultDialer.DialContext(c.Request.Context(), requestURL, header)
+	dialCtx := context.Background()
+	if info.ShouldCancelUpstreamOnClientGone() {
+		dialCtx = c.Request.Context()
+	}
+	conn, resp, dialErr := websocket.DefaultDialer.DialContext(dialCtx, requestURL, header)
 	if dialErr != nil {
 		if resp != nil {
 			return nil, types.NewErrorWithStatusCode(
@@ -231,13 +236,15 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 		})
 	}
 	stopCloseWatcher := make(chan struct{})
-	go func() {
-		select {
-		case <-c.Request.Context().Done():
-			closeConn()
-		case <-stopCloseWatcher:
-		}
-	}()
+	if info.ShouldCancelUpstreamOnClientGone() {
+		go func() {
+			select {
+			case <-c.Request.Context().Done():
+				closeConn()
+			case <-stopCloseWatcher:
+			}
+		}()
+	}
 	defer func() {
 		close(stopCloseWatcher)
 		closeConn()
