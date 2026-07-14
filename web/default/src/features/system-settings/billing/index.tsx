@@ -110,6 +110,16 @@ const defaultBillingSettings: BillingSettings = {
   'checkin_setting.enabled': false,
   'checkin_setting.min_quota': 1000,
   'checkin_setting.max_quota': 10000,
+  'empty_response_compensation_setting.enabled': false,
+  'empty_response_compensation_setting.model_ratios': '{}',
+  'empty_response_compensation_setting.min_qualification_amount': 50,
+  'empty_response_compensation_setting.input_token_threshold': 50,
+  'empty_response_compensation_setting.output_token_threshold': 9,
+  'empty_response_compensation_setting.claim_window_days': 7,
+  'empty_response_compensation_setting.daily_claim_limit': 0,
+  'empty_response_compensation_setting.overclock_window_minutes': 10,
+  'empty_response_compensation_setting.overclock_empty_count': 3,
+  'empty_response_compensation_setting.announcement': '',
 }
 
 export function BillingSettings() {

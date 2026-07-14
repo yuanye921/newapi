@@ -334,6 +334,16 @@ export type BillingSettings = {
   'checkin_setting.enabled': boolean
   'checkin_setting.min_quota': number
   'checkin_setting.max_quota': number
+  'empty_response_compensation_setting.enabled': boolean
+  'empty_response_compensation_setting.model_ratios': string
+  'empty_response_compensation_setting.min_qualification_amount': number
+  'empty_response_compensation_setting.input_token_threshold': number
+  'empty_response_compensation_setting.output_token_threshold': number
+  'empty_response_compensation_setting.claim_window_days': number
+  'empty_response_compensation_setting.daily_claim_limit': number
+  'empty_response_compensation_setting.overclock_window_minutes': number
+  'empty_response_compensation_setting.overclock_empty_count': number
+  'empty_response_compensation_setting.announcement': string
 }
 
 export type OperationsSettings = {

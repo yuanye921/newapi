@@ -66,6 +66,9 @@ func xAIStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			sr.Error(err)
 		}
 	})
+	if strings.TrimSpace(responseTextBuilder.String()) != "" || toolCount > 0 {
+		info.MarkMeaningfulOutput()
+	}
 
 	if !containStreamUsage {
 		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
@@ -92,6 +95,15 @@ func xAIHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response
 	if xaiResponse.Usage != nil {
 		xaiResponse.Usage.CompletionTokens = xaiResponse.Usage.TotalTokens - xaiResponse.Usage.PromptTokens
 		xaiResponse.Usage.CompletionTokenDetails.TextTokens = xaiResponse.Usage.CompletionTokens - xaiResponse.Usage.CompletionTokenDetails.ReasoningTokens
+	}
+	for _, choice := range xaiResponse.Choices {
+		if strings.TrimSpace(choice.Message.StringContent()) != "" ||
+			strings.TrimSpace(choice.Message.GetReasoningContent()) != "" ||
+			(choice.Message.Refusal != nil && strings.TrimSpace(*choice.Message.Refusal) != "") ||
+			len(choice.Message.ParseToolCalls()) > 0 {
+			info.MarkMeaningfulOutput()
+			break
+		}
 	}
 
 	// new body

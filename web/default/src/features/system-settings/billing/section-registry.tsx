@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { parseCurrencyDisplayType } from '@/lib/currency'
 
 import { CheckinSettingsSection } from '../general/checkin-settings-section'
+import { EmptyResponseCompensationSection } from '../general/empty-response-compensation-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
 import { PaymentSettingsSection } from '../integrations/payment-settings-section'
@@ -188,6 +189,49 @@ const BILLING_SECTIONS = [
             settings['payment_setting.compliance_terms_version'] ?? '',
           confirmedAt: settings['payment_setting.compliance_confirmed_at'] ?? 0,
           confirmedBy: settings['payment_setting.compliance_confirmed_by'] ?? 0,
+        }}
+      />
+    ),
+  },
+  {
+    id: 'empty-response-compensation',
+    titleKey: 'Empty Response Compensation',
+    build: (settings: BillingSettings) => (
+      <EmptyResponseCompensationSection
+        defaultValues={{
+          enabled:
+            settings['empty_response_compensation_setting.enabled'] ?? false,
+          modelRatios:
+            settings['empty_response_compensation_setting.model_ratios'] ??
+            '{}',
+          minQualificationAmount:
+            settings[
+              'empty_response_compensation_setting.min_qualification_amount'
+            ] ?? 50,
+          inputTokenThreshold:
+            settings[
+              'empty_response_compensation_setting.input_token_threshold'
+            ] ?? 50,
+          outputTokenThreshold:
+            settings[
+              'empty_response_compensation_setting.output_token_threshold'
+            ] ?? 9,
+          claimWindowDays:
+            settings['empty_response_compensation_setting.claim_window_days'] ??
+            7,
+          dailyClaimLimit:
+            settings['empty_response_compensation_setting.daily_claim_limit'] ??
+            0,
+          overclockWindowMinutes:
+            settings[
+              'empty_response_compensation_setting.overclock_window_minutes'
+            ] ?? 10,
+          overclockEmptyCount:
+            settings[
+              'empty_response_compensation_setting.overclock_empty_count'
+            ] ?? 3,
+          announcement:
+            settings['empty_response_compensation_setting.announcement'] ?? '',
         }}
       />
     ),

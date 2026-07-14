@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
+	emptysetting "github.com/QuantumNous/new-api/setting/empty_response_compensation_setting"
 	"github.com/QuantumNous/new-api/setting/model_limit_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -280,6 +281,25 @@ func UpdateOption(c *gin.Context) {
 		}
 	case "model_limit_setting.daily_request_limits":
 		err = model_limit_setting.ValidateDailyRequestLimitsJSON(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+	case "empty_response_compensation_setting.enabled",
+		"empty_response_compensation_setting.model_ratios",
+		"empty_response_compensation_setting.min_qualification_amount",
+		"empty_response_compensation_setting.input_token_threshold",
+		"empty_response_compensation_setting.output_token_threshold",
+		"empty_response_compensation_setting.claim_window_days",
+		"empty_response_compensation_setting.daily_claim_limit",
+		"empty_response_compensation_setting.overclock_window_minutes",
+		"empty_response_compensation_setting.overclock_empty_count",
+		"empty_response_compensation_setting.announcement":
+		configKey := strings.TrimPrefix(option.Key, "empty_response_compensation_setting.")
+		err = emptysetting.ValidateOption(configKey, option.Value.(string))
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,

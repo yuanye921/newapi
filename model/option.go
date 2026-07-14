@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
+	emptysetting "github.com/QuantumNous/new-api/setting/empty_response_compensation_setting"
 	"github.com/QuantumNous/new-api/setting/model_limit_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/performance_setting"
@@ -624,6 +625,8 @@ func handleConfigUpdate(key, value string) bool {
 			common.SysError("failed to update model daily request limits: " + err.Error())
 		}
 		InvalidatePricingCache()
+	} else if configName == "empty_response_compensation_setting" {
+		emptysetting.RefreshSnapshot()
 	} else if configName == "theme" {
 		system_setting.UpdateAndSyncTheme()
 	}

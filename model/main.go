@@ -297,6 +297,7 @@ func migrateDB() error {
 		&SystemInstance{},
 		&SystemTask{},
 		&SystemTaskLock{},
+		&EmptyResponseCompensation{},
 	)
 	if err != nil {
 		return err
@@ -348,6 +349,7 @@ func migrateDBFast() error {
 		{&PerfMetric{}, "PerfMetric"},
 		{&SystemInstance{}, "SystemInstance"},
 		{&SystemTask{}, "SystemTask"},
+		{&EmptyResponseCompensation{}, "EmptyResponseCompensation"},
 		{&SystemTaskLock{}, "SystemTaskLock"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大

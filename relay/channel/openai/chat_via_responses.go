@@ -58,6 +58,7 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if oaiError := responsesResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	markResponsesMeaningfulOutput(info, &responsesResp)
 
 	chatId := helper.GetResponseID(c)
 	chatResp, usage, err := service.ResponsesResponseToChatCompletionsResponse(&responsesResp, chatId)
@@ -444,6 +445,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 		case "response.completed":
 			if streamResp.Response != nil {
+				markResponsesMeaningfulOutput(info, streamResp.Response)
 				if streamResp.Response.Model != "" {
 					model = streamResp.Response.Model
 				}
@@ -513,6 +515,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	if streamErr != nil {
 		return nil, streamErr
+	}
+	if strings.TrimSpace(usageText.String()) != "" || sawToolCall {
+		info.MarkMeaningfulOutput()
 	}
 
 	if usage.TotalTokens == 0 {

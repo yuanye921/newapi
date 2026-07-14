@@ -33,6 +33,7 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	if oaiError := responsesResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	markResponsesMeaningfulOutput(info, &responsesResponse)
 
 	if responsesResponse.HasImageGenerationCall() {
 		c.Set("image_generation_call", true)
@@ -92,6 +93,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		switch streamResponse.Type {
 		case "response.completed":
 			if streamResponse.Response != nil {
+				markResponsesMeaningfulOutput(info, streamResponse.Response)
 				if streamResponse.Response.Usage != nil {
 					if streamResponse.Response.Usage.InputTokens != 0 {
 						usage.PromptTokens = streamResponse.Response.Usage.InputTokens
@@ -112,12 +114,22 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 					c.Set("image_generation_call_size", streamResponse.Response.GetSize())
 				}
 			}
-		case "response.output_text.delta":
+		case "response.output_text.delta", "response.refusal.delta":
 			// 处理输出文本
 			responseTextBuilder.WriteString(streamResponse.Delta)
+			if strings.TrimSpace(streamResponse.Delta) != "" {
+				info.MarkMeaningfulOutput()
+			}
+		case "response.reasoning_summary_text.delta", "response.reasoning_text.delta", "response.function_call_arguments.delta":
+			if strings.TrimSpace(streamResponse.Delta) != "" {
+				info.MarkMeaningfulOutput()
+			}
 		case dto.ResponsesOutputTypeItemDone:
 			// 函数调用处理
 			if streamResponse.Item != nil {
+				if streamResponse.Item.Type == "function_call" || streamResponse.Item.Type == "computer_call" {
+					info.MarkMeaningfulOutput()
+				}
 				switch streamResponse.Item.Type {
 				case dto.BuildInCallWebSearchCall:
 					if info != nil && info.ResponsesUsageInfo != nil && info.ResponsesUsageInfo.BuiltInTools != nil {
@@ -147,4 +159,32 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 
 	return usage, nil
+}
+
+func markResponsesMeaningfulOutput(info *relaycommon.RelayInfo, response *dto.OpenAIResponsesResponse) {
+	if info == nil || response == nil {
+		return
+	}
+	for _, output := range response.Output {
+		if strings.HasSuffix(output.Type, "_call") {
+			info.MarkMeaningfulOutput()
+			return
+		}
+		if strings.TrimSpace(output.Name) != "" || strings.TrimSpace(output.CallId) != "" || strings.TrimSpace(output.ArgumentsString()) != "" {
+			info.MarkMeaningfulOutput()
+			return
+		}
+		for _, content := range output.Content {
+			if strings.TrimSpace(content.Text) != "" || strings.TrimSpace(content.Refusal) != "" {
+				info.MarkMeaningfulOutput()
+				return
+			}
+		}
+		for _, summary := range output.Summary {
+			if strings.TrimSpace(summary.Text) != "" {
+				info.MarkMeaningfulOutput()
+				return
+			}
+		}
+	}
 }

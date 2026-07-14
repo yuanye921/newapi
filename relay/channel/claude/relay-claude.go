@@ -805,8 +805,10 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		return types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
 	if claudeError := claudeResponse.GetClaudeError(); claudeError != nil && claudeError.Type != "" {
+		info.MarkResponseFailed()
 		return types.WithClaudeError(*claudeError, http.StatusInternalServerError)
 	}
+	markClaudeMeaningfulOutput(info, &claudeResponse)
 	if claudeResponse.StopReason != "" {
 		maybeMarkClaudeRefusal(c, claudeResponse.StopReason)
 	}
@@ -919,8 +921,10 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		return types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
 	if claudeError := claudeResponse.GetClaudeError(); claudeError != nil && claudeError.Type != "" {
+		info.MarkResponseFailed()
 		return types.WithClaudeError(*claudeError, http.StatusInternalServerError)
 	}
+	markClaudeMeaningfulOutput(info, &claudeResponse)
 	maybeMarkClaudeRefusal(c, claudeResponse.StopReason)
 	if claudeInfo.Usage == nil {
 		claudeInfo.Usage = &dto.Usage{}
@@ -954,6 +958,36 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 
 	service.IOCopyBytesGracefully(c, httpResp, responseData)
 	return nil
+}
+
+func markClaudeMeaningfulOutput(info *relaycommon.RelayInfo, response *dto.ClaudeResponse) {
+	if info == nil || response == nil {
+		return
+	}
+	if strings.TrimSpace(response.Completion) != "" {
+		info.MarkMeaningfulOutput()
+		return
+	}
+	blocks := make([]dto.ClaudeMediaMessage, 0, len(response.Content)+2)
+	blocks = append(blocks, response.Content...)
+	if response.ContentBlock != nil {
+		blocks = append(blocks, *response.ContentBlock)
+	}
+	if response.Delta != nil {
+		blocks = append(blocks, *response.Delta)
+	}
+	for _, block := range blocks {
+		if strings.TrimSpace(block.GetText()) != "" ||
+			(block.Thinking != nil && strings.TrimSpace(*block.Thinking) != "") ||
+			(block.PartialJson != nil && strings.TrimSpace(*block.PartialJson) != "") ||
+			strings.TrimSpace(block.Delta) != "" ||
+			strings.TrimSpace(block.Name) != "" ||
+			strings.TrimSpace(block.Id) != "" ||
+			block.Input != nil || strings.HasSuffix(block.Type, "_result") {
+			info.MarkMeaningfulOutput()
+			return
+		}
+	}
 }
 
 func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {

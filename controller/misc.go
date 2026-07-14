@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/oauth"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
+	emptysetting "github.com/QuantumNous/new-api/setting/empty_response_compensation_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
@@ -106,20 +107,21 @@ func GetStatus(c *gin.Context) {
 		"HeaderNavModules":    common.OptionMap["HeaderNavModules"],
 		"SidebarModulesAdmin": common.OptionMap["SidebarModulesAdmin"],
 
-		"oidc_enabled":                system_setting.GetOIDCSettings().Enabled,
-		"oidc_client_id":              system_setting.GetOIDCSettings().ClientId,
-		"oidc_authorization_endpoint": system_setting.GetOIDCSettings().AuthorizationEndpoint,
-		"passkey_login":               passkeySetting.Enabled,
-		"passkey_display_name":        passkeySetting.RPDisplayName,
-		"passkey_rp_id":               passkeySetting.RPID,
-		"passkey_origins":             passkeySetting.Origins,
-		"passkey_allow_insecure":      passkeySetting.AllowInsecureOrigin,
-		"passkey_user_verification":   passkeySetting.UserVerification,
-		"passkey_attachment":          passkeySetting.AttachmentPreference,
-		"setup":                       constant.Setup,
-		"user_agreement_enabled":      legalSetting.UserAgreement != "",
-		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
-		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
+		"oidc_enabled":                        system_setting.GetOIDCSettings().Enabled,
+		"oidc_client_id":                      system_setting.GetOIDCSettings().ClientId,
+		"oidc_authorization_endpoint":         system_setting.GetOIDCSettings().AuthorizationEndpoint,
+		"passkey_login":                       passkeySetting.Enabled,
+		"passkey_display_name":                passkeySetting.RPDisplayName,
+		"passkey_rp_id":                       passkeySetting.RPID,
+		"passkey_origins":                     passkeySetting.Origins,
+		"passkey_allow_insecure":              passkeySetting.AllowInsecureOrigin,
+		"passkey_user_verification":           passkeySetting.UserVerification,
+		"passkey_attachment":                  passkeySetting.AttachmentPreference,
+		"setup":                               constant.Setup,
+		"user_agreement_enabled":              legalSetting.UserAgreement != "",
+		"privacy_policy_enabled":              legalSetting.PrivacyPolicy != "",
+		"checkin_enabled":                     operation_setting.GetCheckinSetting().Enabled,
+		"empty_response_compensation_enabled": emptysetting.Get().Enabled,
 	}
 
 	// 根据启用状态注入可选内容

@@ -78,6 +78,9 @@ func ProcessStreamResponse(streamResponse dto.ChatCompletionsStreamResponse, res
 	for _, choice := range streamResponse.Choices {
 		responseTextBuilder.WriteString(choice.Delta.GetContentString())
 		responseTextBuilder.WriteString(choice.Delta.GetReasoningContent())
+		if choice.Delta.Refusal != nil {
+			responseTextBuilder.WriteString(*choice.Delta.Refusal)
+		}
 		if choice.Delta.ToolCalls != nil {
 			if len(choice.Delta.ToolCalls) > *toolCount {
 				*toolCount = len(choice.Delta.ToolCalls)

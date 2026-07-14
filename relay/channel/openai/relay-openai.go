@@ -162,6 +162,9 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 		}
 	})
+	if strings.TrimSpace(responseTextBuilder.String()) != "" || toolCount > 0 {
+		info.MarkMeaningfulOutput()
+	}
 
 	// 对音频模型，从倒数第二个stream data中提取usage信息
 	if streamErr != nil {
@@ -245,6 +248,12 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	for _, choice := range simpleResponse.Choices {
+		if strings.TrimSpace(choice.Message.StringContent()) != "" ||
+			strings.TrimSpace(choice.Message.GetReasoningContent()) != "" ||
+			(choice.Message.Refusal != nil && strings.TrimSpace(*choice.Message.Refusal) != "") ||
+			len(choice.Message.ParseToolCalls()) > 0 {
+			info.MarkMeaningfulOutput()
+		}
 		if choice.FinishReason == constant.FinishReasonContentFilter {
 			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "openai_finish_reason=content_filter")
 			break

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -177,7 +178,9 @@ type RelayInfo struct {
 	// 若为空，调用 GetFinalRequestRelayFormat 会回退到 RequestConversionChain 的最后一项或 RelayFormat。
 	FinalRequestRelayFormat types.RelayFormat
 
-	StreamStatus *StreamStatus
+	StreamStatus     *StreamStatus
+	meaningfulOutput atomic.Bool
+	responseFailed   atomic.Bool
 
 	ThinkingContentInfo
 	TokenCountMeta
@@ -186,6 +189,36 @@ type RelayInfo struct {
 	*ResponsesUsageInfo
 	*ChannelMeta
 	*TaskRelayInfo
+}
+
+func (info *RelayInfo) MarkMeaningfulOutput() {
+	if info != nil {
+		info.meaningfulOutput.Store(true)
+	}
+}
+
+func (info *RelayInfo) HasMeaningfulOutput() bool {
+	return info != nil && info.meaningfulOutput.Load()
+}
+
+func (info *RelayInfo) MarkResponseFailed() {
+	if info != nil {
+		info.responseFailed.Store(true)
+	}
+}
+
+func (info *RelayInfo) HasResponseFailed() bool {
+	return info != nil && info.responseFailed.Load()
+}
+
+func (info *RelayInfo) HasCleanResponseEnd() bool {
+	if info == nil || info.HasResponseFailed() {
+		return false
+	}
+	if !info.IsStream {
+		return true
+	}
+	return info.StreamStatus != nil && info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors()
 }
 
 func (info *RelayInfo) ShouldCancelUpstreamOnClientGone() bool {
