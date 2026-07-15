@@ -116,6 +116,20 @@ func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	return logs, err
 }
 
+func GetLogByTokenIdPaginated(tokenId int, startIdx int, pageSize int) (logs []*Log, total int64, err error) {
+	if err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	order := "id desc"
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		order = clickHouseLogOrder("")
+	}
+	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order(order).Offset(startIdx).Limit(pageSize).Find(&logs).Error
+	formatUserLogs(logs, startIdx)
+	return logs, total, err
+}
+
 func RecordLog(userId int, logType int, content string) {
 	if logType == LogTypeConsume && !common.LogConsumeEnabled {
 		return

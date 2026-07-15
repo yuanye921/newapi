@@ -80,6 +80,18 @@ func GetLogByKey(c *gin.Context) {
 		})
 		return
 	}
+	if c.Query("p") != "" || c.Query("page_size") != "" || c.Query("ps") != "" || c.Query("size") != "" {
+		pageInfo := common.GetPageQuery(c)
+		logs, total, err := model.GetLogByTokenIdPaginated(tokenId, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		pageInfo.SetTotal(int(total))
+		pageInfo.SetItems(logs)
+		common.ApiSuccess(c, pageInfo)
+		return
+	}
 	logs, err := model.GetLogByTokenId(tokenId)
 	if err != nil {
 		c.JSON(200, gin.H{
