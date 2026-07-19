@@ -5187,11 +5187,10 @@
     "Window start": "視窗開始",
     "Window end": "視窗結束",
     "Degraded": "狀態下降",
-    "{{count}} requests": "{{count}} 次請求",
     "15 minutes ago": "15 分鐘前",
     "Now": "現在",
-    "Minute {{time}}: no requests": "{{time}}：無請求",
-    "Minute {{time}}: {{rate}} success across {{count}} requests": "{{time}}：{{count}} 次請求，成功率 {{rate}}",
+    "Minute {{time}}: no recent status": "{{time}}：暫無狀態",
+    "Minute {{time}}: {{rate}} success rate": "{{time}}：成功率 {{rate}}",
     "No model activity was recorded in the last 15 minutes.": "最近 15 分鐘暫無模型調用記錄。",
     "Failed to load model monitor data": "載入模型監控資料失敗"
   }

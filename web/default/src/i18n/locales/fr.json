@@ -5270,11 +5270,10 @@
     "Window start": "Début de la fenêtre",
     "Window end": "Fin de la fenêtre",
     "Degraded": "Dégradé",
-    "{{count}} requests": "{{count}} requêtes",
     "15 minutes ago": "Il y a 15 minutes",
     "Now": "Maintenant",
-    "Minute {{time}}: no requests": "Minute {{time}} : aucune requête",
-    "Minute {{time}}: {{rate}} success across {{count}} requests": "Minute {{time}} : {{rate}} de réussite sur {{count}} requêtes",
+    "Minute {{time}}: no recent status": "Minute {{time}} : aucun état récent",
+    "Minute {{time}}: {{rate}} success rate": "Minute {{time}} : taux de réussite {{rate}}",
     "No model activity was recorded in the last 15 minutes.": "Aucune activité de modèle n'a été enregistrée au cours des 15 dernières minutes.",
     "Failed to load model monitor data": "Échec du chargement des données de surveillance des modèles"
   }

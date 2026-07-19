@@ -41,6 +41,17 @@ const WINDOW_MINUTES = 15
 function ModelStatusCard({ model }: { model: MonitorModel }) {
   const { t } = useTranslation()
   const healthy = model.success_rate >= 90
+  const firstObservedRate = model.timeline.find(
+    (point) => point.success_rate != null
+  )?.success_rate
+  let latestRate = firstObservedRate ?? model.success_rate
+  const displayTimeline = model.timeline.map((point) => {
+    if (point.success_rate != null) {
+      latestRate = point.success_rate
+      return point
+    }
+    return { ...point, success_rate: latestRate }
+  })
 
   return (
     <Card className='gap-0 py-0' data-card-hover='false'>
@@ -84,13 +95,12 @@ function ModelStatusCard({ model }: { model: MonitorModel }) {
           className='mt-5 grid h-4 grid-cols-[repeat(15,minmax(0,1fr))] gap-1'
           aria-label={t('Success rate')}
         >
-          {model.timeline.map((point) => (
+          {displayTimeline.map((point) => (
             <MinuteBar key={point.ts} point={point} />
           ))}
         </div>
         <div className='text-muted-foreground mt-1.5 flex items-center justify-between text-[11px]'>
           <span>{t('15 minutes ago')}</span>
-          <span>{t('{{count}} requests', { count: model.request_count })}</span>
           <span>{t('Now')}</span>
         </div>
       </CardContent>
@@ -106,11 +116,10 @@ function MinuteBar({ point }: { point: MonitorMinutePoint }) {
   })
   const title =
     point.success_rate == null
-      ? t('Minute {{time}}: no requests', { time })
-      : t('Minute {{time}}: {{rate}} success across {{count}} requests', {
+      ? t('Minute {{time}}: no recent status', { time })
+      : t('Minute {{time}}: {{rate}} success rate', {
           time,
           rate: `${point.success_rate.toFixed(0)}%`,
-          count: point.request_count,
         })
 
   return (

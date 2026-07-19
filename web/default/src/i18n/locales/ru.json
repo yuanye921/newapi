@@ -5270,11 +5270,10 @@
     "Window start": "Начало окна",
     "Window end": "Конец окна",
     "Degraded": "Снижение",
-    "{{count}} requests": "Запросов: {{count}}",
     "15 minutes ago": "15 минут назад",
     "Now": "Сейчас",
-    "Minute {{time}}: no requests": "Минута {{time}}: запросов нет",
-    "Minute {{time}}: {{rate}} success across {{count}} requests": "Минута {{time}}: успешность {{rate}} для {{count}} запросов",
+    "Minute {{time}}: no recent status": "Минута {{time}}: нет недавнего статуса",
+    "Minute {{time}}: {{rate}} success rate": "Минута {{time}}: успешность {{rate}}",
     "No model activity was recorded in the last 15 minutes.": "За последние 15 минут активность моделей не зарегистрирована.",
     "Failed to load model monitor data": "Не удалось загрузить данные мониторинга моделей"
   }

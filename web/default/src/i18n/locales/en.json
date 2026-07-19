@@ -5270,11 +5270,10 @@
     "Window start": "Window start",
     "Window end": "Window end",
     "Degraded": "Degraded",
-    "{{count}} requests": "{{count}} requests",
     "15 minutes ago": "15 minutes ago",
     "Now": "Now",
-    "Minute {{time}}: no requests": "Minute {{time}}: no requests",
-    "Minute {{time}}: {{rate}} success across {{count}} requests": "Minute {{time}}: {{rate}} success across {{count}} requests",
+    "Minute {{time}}: no recent status": "Minute {{time}}: no recent status",
+    "Minute {{time}}: {{rate}} success rate": "Minute {{time}}: {{rate}} success rate",
     "No model activity was recorded in the last 15 minutes.": "No model activity was recorded in the last 15 minutes.",
     "Failed to load model monitor data": "Failed to load model monitor data"
   }

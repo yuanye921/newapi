@@ -5270,11 +5270,10 @@
     "Window start": "Bắt đầu khung",
     "Window end": "Kết thúc khung",
     "Degraded": "Suy giảm",
-    "{{count}} requests": "{{count}} yêu cầu",
     "15 minutes ago": "15 phút trước",
     "Now": "Hiện tại",
-    "Minute {{time}}: no requests": "Phút {{time}}: không có yêu cầu",
-    "Minute {{time}}: {{rate}} success across {{count}} requests": "Phút {{time}}: tỷ lệ thành công {{rate}} trên {{count}} yêu cầu",
+    "Minute {{time}}: no recent status": "Phút {{time}}: không có trạng thái gần đây",
+    "Minute {{time}}: {{rate}} success rate": "Phút {{time}}: tỷ lệ thành công {{rate}}",
     "No model activity was recorded in the last 15 minutes.": "Không ghi nhận hoạt động mô hình nào trong 15 phút gần nhất.",
     "Failed to load model monitor data": "Không thể tải dữ liệu giám sát mô hình"
   }

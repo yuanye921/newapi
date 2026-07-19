@@ -5270,11 +5270,10 @@
     "Window start": "窗口开始",
     "Window end": "窗口结束",
     "Degraded": "状态下降",
-    "{{count}} requests": "{{count}} 次请求",
     "15 minutes ago": "15 分钟前",
     "Now": "现在",
-    "Minute {{time}}: no requests": "{{time}}：无请求",
-    "Minute {{time}}: {{rate}} success across {{count}} requests": "{{time}}：{{count}} 次请求，成功率 {{rate}}",
+    "Minute {{time}}: no recent status": "{{time}}：暂无状态",
+    "Minute {{time}}: {{rate}} success rate": "{{time}}：成功率 {{rate}}",
     "No model activity was recorded in the last 15 minutes.": "最近 15 分钟暂无模型调用记录。",
     "Failed to load model monitor data": "加载模型监控数据失败"
   }
