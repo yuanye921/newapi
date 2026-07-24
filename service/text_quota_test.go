@@ -109,6 +109,43 @@ func TestCalculateTextQuotaSummaryUsesSplitClaudeCacheCreationRatios(t *testing.
 	require.Equal(t, 118, summary.Quota)
 }
 
+func TestCalculateTextQuotaSummaryUsesSplitCacheCreationRatiosForOpenAISemantic(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		RelayFormat:             types.RelayFormatOpenAI,
+		FinalRequestRelayFormat: types.RelayFormatOpenAI,
+		OriginModelName:         "claude-opus-4-6-thinking",
+		PriceData: types.PriceData{
+			ModelRatio:           1,
+			CompletionRatio:      1,
+			CacheCreationRatio:   1.25,
+			CacheCreation5mRatio: 1.25,
+			CacheCreation1hRatio: 2,
+			GroupRatioInfo:       types.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	usage := &dto.Usage{
+		PromptTokens: 100,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedCreationTokens: 80,
+		},
+		ClaudeCacheCreation1hTokens: 80,
+		UsageSemantic:               "openai",
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+	require.False(t, summary.IsClaudeUsageSemantic)
+	require.Equal(t, 80, summary.CacheCreationTokens1h)
+	// OpenAI prompt_tokens includes the cache write: (100-80) + 80*2 = 180.
+	require.Equal(t, 180, summary.Quota)
+}
+
 func TestCalculateTextQuotaSummaryUsesAnthropicUsageSemanticFromUpstreamUsage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
