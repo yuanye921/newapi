@@ -16,18 +16,28 @@ func commonPointer[T any](value T) *T {
 
 func TestNormalizeClaudeSamplingParams(t *testing.T) {
 	tests := []struct {
-		name        string
-		request     *dto.ClaudeRequest
-		wantTopP    bool
-		wantTopK    bool
+		name            string
+		request         *dto.ClaudeRequest
+		wantTemperature bool
+		wantTopP        bool
+		wantTopK        bool
 	}{
+		{
+			name: "claude 4 drops temperature",
+			request: &dto.ClaudeRequest{
+				Model:       "claude-opus-4-6",
+				Temperature: commonPointer(0.7),
+			},
+			wantTemperature: false,
+		},
 		{
 			name: "claude 4 drops top k",
 			request: &dto.ClaudeRequest{
 				Model: "claude-opus-4-6",
 				TopK:  commonPointer(40),
 			},
-			wantTopK: false,
+			wantTemperature: false,
+			wantTopK:        false,
 		},
 		{
 			name: "claude 3 keeps top k",
@@ -35,7 +45,8 @@ func TestNormalizeClaudeSamplingParams(t *testing.T) {
 				Model: "claude-3-5-sonnet",
 				TopK:  commonPointer(40),
 			},
-			wantTopK: true,
+			wantTemperature: false,
+			wantTopK:        true,
 		},
 		{
 			name: "temperature takes precedence over top p",
@@ -44,13 +55,25 @@ func TestNormalizeClaudeSamplingParams(t *testing.T) {
 				Temperature: commonPointer(0.7),
 				TopP:        commonPointer(0.9),
 			},
-			wantTopP: false,
+			wantTemperature: true,
+			wantTopP:        false,
+		},
+		{
+			name: "claude 4 keeps top p after dropping temperature",
+			request: &dto.ClaudeRequest{
+				Model:       "claude-sonnet-4-5",
+				Temperature: commonPointer(0.7),
+				TopP:        commonPointer(0.9),
+			},
+			wantTemperature: false,
+			wantTopP:        true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			NormalizeClaudeSamplingParams(tt.request)
+			assert.Equal(t, tt.wantTemperature, tt.request.Temperature != nil)
 			assert.Equal(t, tt.wantTopP, tt.request.TopP != nil)
 			assert.Equal(t, tt.wantTopK, tt.request.TopK != nil)
 		})
