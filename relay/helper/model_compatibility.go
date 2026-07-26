@@ -1,20 +1,42 @@
 package helper
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
-func isClaude4Model(model string) bool {
+// Claude models released after Opus 4.6 reject temperature, top_p, and top_k.
+func ClaudeModelRejectsSamplingParams(model string) bool {
 	normalizedModel := strings.ToLower(strings.TrimSpace(model))
-	return strings.Contains(normalizedModel, "claude-opus-4") ||
-		strings.Contains(normalizedModel, "claude-sonnet-4") ||
-		strings.Contains(normalizedModel, "claude-haiku-4")
-}
+	if strings.Contains(normalizedModel, "claude-mythos") {
+		return true
+	}
 
-// Claude 4 models reject the legacy top_k sampling parameter.
-func ClaudeModelRejectsTopK(model string) bool {
-	return isClaude4Model(model)
-}
+	claudeIndex := strings.Index(normalizedModel, "claude-")
+	if claudeIndex < 0 {
+		return false
+	}
+	parts := strings.Split(normalizedModel[claudeIndex+len("claude-"):], "-")
+	if len(parts) == 0 {
+		return false
+	}
 
-// Claude 4 models use the provider default and reject the deprecated temperature parameter.
-func ClaudeModelRejectsTemperature(model string) bool {
-	return isClaude4Model(model)
+	versionIndex := 0
+	major, err := strconv.Atoi(parts[versionIndex])
+	if err != nil {
+		versionIndex = 1
+		if len(parts) <= versionIndex {
+			return false
+		}
+		major, err = strconv.Atoi(parts[versionIndex])
+		if err != nil {
+			return false
+		}
+	}
+
+	minor := 0
+	if len(parts) > versionIndex+1 {
+		minor, _ = strconv.Atoi(parts[versionIndex+1])
+	}
+	return major > 4 || (major == 4 && minor >= 7)
 }

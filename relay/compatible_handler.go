@@ -43,10 +43,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
-	if request.Temperature != nil && helper.ClaudeModelRejectsTemperature(request.Model) {
+	if helper.ClaudeModelRejectsSamplingParams(request.Model) {
 		request.Temperature = nil
-	}
-	if request.TopK != nil && helper.ClaudeModelRejectsTopK(request.Model) {
+		request.TopP = nil
 		request.TopK = nil
 	}
 

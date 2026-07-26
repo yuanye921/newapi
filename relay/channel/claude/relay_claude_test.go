@@ -23,29 +23,25 @@ func TestNormalizeClaudeSamplingParams(t *testing.T) {
 		wantTopK        bool
 	}{
 		{
-			name: "claude 4 drops temperature",
+			name: "claude 5 drops all sampling parameters",
 			request: &dto.ClaudeRequest{
-				Model:       "claude-opus-4-6",
+				Model:       "[特价aws]claude-opus-5",
 				Temperature: commonPointer(0.7),
+				TopP:        commonPointer(0.9),
+				TopK:        commonPointer(40),
 			},
 			wantTemperature: false,
-		},
-		{
-			name: "claude 4 drops top k",
-			request: &dto.ClaudeRequest{
-				Model: "claude-opus-4-6",
-				TopK:  commonPointer(40),
-			},
-			wantTemperature: false,
+			wantTopP:        false,
 			wantTopK:        false,
 		},
 		{
-			name: "claude 3 keeps top k",
+			name: "claude 4.6 keeps supported sampling parameters",
 			request: &dto.ClaudeRequest{
-				Model: "claude-3-5-sonnet",
-				TopK:  commonPointer(40),
+				Model:       "claude-opus-4-6",
+				Temperature: commonPointer(0.7),
+				TopK:        commonPointer(40),
 			},
-			wantTemperature: false,
+			wantTemperature: true,
 			wantTopK:        true,
 		},
 		{
@@ -57,16 +53,6 @@ func TestNormalizeClaudeSamplingParams(t *testing.T) {
 			},
 			wantTemperature: true,
 			wantTopP:        false,
-		},
-		{
-			name: "claude 4 keeps top p after dropping temperature",
-			request: &dto.ClaudeRequest{
-				Model:       "claude-sonnet-4-5",
-				Temperature: commonPointer(0.7),
-				TopP:        commonPointer(0.9),
-			},
-			wantTemperature: false,
-			wantTopP:        true,
 		},
 	}
 

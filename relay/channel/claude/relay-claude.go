@@ -23,14 +23,14 @@ func NormalizeClaudeSamplingParams(request *dto.ClaudeRequest) {
 	if request == nil {
 		return
 	}
-	if request.Temperature != nil && helper.ClaudeModelRejectsTemperature(request.Model) {
+	if helper.ClaudeModelRejectsSamplingParams(request.Model) {
 		request.Temperature = nil
+		request.TopP = nil
+		request.TopK = nil
+		return
 	}
 	if request.Temperature != nil && request.TopP != nil {
 		request.TopP = nil
-	}
-	if request.TopK != nil && helper.ClaudeModelRejectsTopK(request.Model) {
-		request.TopK = nil
 	}
 }
 
