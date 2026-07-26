@@ -13,8 +13,46 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGeminiChatHandlerTreatsUnblockedEmptyCandidatesAsCleanResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	info := &relaycommon.RelayInfo{
+		RelayFormat:     types.RelayFormatOpenAI,
+		OriginModelName: "gemini-test",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "gemini-test",
+		},
+	}
+	payload := dto.GeminiChatResponse{
+		UsageMetadata: dto.GeminiUsageMetadata{
+			PromptTokenCount: 10,
+			TotalTokenCount:  10,
+		},
+	}
+	body, err := common.Marshal(payload)
+	require.NoError(t, err)
+
+	usage, newAPIError := GeminiChatHandler(c, info, &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(body)),
+	})
+
+	require.Nil(t, newAPIError)
+	require.NotNil(t, usage)
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, 10, usage.PromptTokens)
+	assert.Contains(t, recorder.Body.String(), `"choices":[]`)
+	assert.False(t, info.HasMeaningfulOutput())
+	assert.True(t, info.HasCleanResponseEnd())
+	assert.Equal(t, "gemini_empty_candidates", common.GetContextKeyString(c, constant.ContextKeyAdminRejectReason))
+}
 
 func TestGeminiChatHandlerCompletionTokensExcludeToolUsePromptTokens(t *testing.T) {
 	t.Parallel()

@@ -67,6 +67,39 @@ func TestGeminiResponsesHandlerReturnsOpenAIResponsesJSON(t *testing.T) {
 	assert.NotContains(t, got, `"candidates"`)
 }
 
+func TestGeminiResponsesHandlerTreatsUnblockedEmptyCandidatesAsCleanResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Set(common.RequestIdKey, "gemini-responses-empty-test")
+
+	info := newGeminiResponsesRelayInfo(false)
+	payload := dto.GeminiChatResponse{
+		UsageMetadata: dto.GeminiUsageMetadata{
+			PromptTokenCount: 10,
+			TotalTokenCount:  10,
+		},
+	}
+	body, err := common.Marshal(payload)
+	require.NoError(t, err)
+
+	usage, newAPIError := GeminiResponsesHandler(c, info, &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(body)),
+	})
+
+	require.Nil(t, newAPIError)
+	require.NotNil(t, usage)
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, 10, usage.PromptTokens)
+	assert.Contains(t, recorder.Body.String(), `"status":"completed"`)
+	assert.Contains(t, recorder.Body.String(), `"output":[]`)
+	assert.False(t, info.HasMeaningfulOutput())
+	assert.True(t, info.HasCleanResponseEnd())
+	assert.Equal(t, "gemini_empty_candidates", common.GetContextKeyString(c, constant.ContextKeyAdminRejectReason))
+}
+
 func TestGeminiResponsesHandlerClosesBodyOnReadError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
