@@ -211,6 +211,19 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 			HandleStreamFinalResponse(c, info, claudeInfo)
 			return claudeInfo.Usage, nil
 		}
+		// Some Claude-compatible providers emit message_start with real usage,
+		// then terminate the stream with an error event. The upstream has already
+		// accepted and billed that input, so keep the known usage for settlement
+		// and do not retry the request on another channel. Streams that fail before
+		// any upstream usage is received remain normal refundable errors.
+		if claudeInfo.Usage != nil && claudeInfo.Usage.BillingUsage != nil &&
+			(claudeInfo.Usage.PromptTokens > 0 ||
+				claudeInfo.Usage.CompletionTokens > 0 ||
+				claudeInfo.Usage.PromptTokensDetails.CachedTokens > 0 ||
+				claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens > 0) {
+			HandleStreamFinalResponse(c, info, claudeInfo)
+			return claudeInfo.Usage, nil
+		}
 		return nil, err
 	}
 

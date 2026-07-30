@@ -1,17 +1,88 @@
 package claude
 
 import (
+	"bytes"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service/relayconvert"
+	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func commonPointer[T any](value T) *T {
 	return &value
+}
+
+func TestClaudeStreamHandlerSettlesUsageReceivedBeforeUpstreamError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	oldStreamingTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 300
+	t.Cleanup(func() { constant.StreamingTimeout = oldStreamingTimeout })
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	c.Set(common.RequestIdKey, "claude-billed-empty-test")
+
+	streamBody := strings.Join([]string{
+		`data: {"type":"message_start","message":{"id":"msg_billed","type":"message","role":"assistant","model":"claude-opus-4-6","content":[],"usage":{"input_tokens":100383,"output_tokens":0}}}`,
+		"",
+		`data: {"type":"error","error":{"type":"api_error","message":"upstream error"}}`,
+		"",
+	}, "\n")
+	info := &relaycommon.RelayInfo{
+		IsStream:    true,
+		RelayFormat: types.RelayFormatClaude,
+		DisablePing: true,
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "claude-opus-4-6"},
+	}
+
+	usage, newAPIError := ClaudeStreamHandler(c, &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewBufferString(streamBody)),
+	}, info)
+
+	require.Nil(t, newAPIError)
+	require.NotNil(t, usage)
+	assert.Equal(t, 100383, usage.PromptTokens)
+	assert.Zero(t, usage.CompletionTokens)
+	assert.True(t, info.HasResponseFailed())
+	assert.NotNil(t, usage.BillingUsage)
+}
+
+func TestClaudeStreamHandlerRefundsErrorBeforeUpstreamUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	oldStreamingTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 300
+	t.Cleanup(func() { constant.StreamingTimeout = oldStreamingTimeout })
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	streamBody := `data: {"type":"error","error":{"type":"api_error","message":"upstream error"}}` + "\n\n"
+	info := &relaycommon.RelayInfo{
+		IsStream:    true,
+		RelayFormat: types.RelayFormatClaude,
+		DisablePing: true,
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "claude-opus-4-6"},
+	}
+
+	usage, newAPIError := ClaudeStreamHandler(c, &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewBufferString(streamBody)),
+	}, info)
+
+	assert.Nil(t, usage)
+	require.NotNil(t, newAPIError)
+	assert.True(t, info.HasResponseFailed())
 }
 
 func TestNormalizeClaudeSamplingParams(t *testing.T) {
