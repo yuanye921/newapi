@@ -1,10 +1,15 @@
 package common
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"mime/multipart"
+	"mime/quotedprintable"
+	"net/mail"
 	"net/smtp"
+	"net/textproto"
 	"slices"
 	"strings"
 	"time"
@@ -76,6 +81,14 @@ func newSMTPClient(addr string) (*smtp.Client, error) {
 }
 
 func SendEmail(subject string, receiver string, content string) error {
+	return sendEmail(subject, receiver, "", content)
+}
+
+func SendEmailWithPlainText(subject string, receiver string, plainText string, htmlContent string) error {
+	return sendEmail(subject, receiver, plainText, htmlContent)
+}
+
+func sendEmail(subject string, receiver string, plainText string, htmlContent string) error {
 	if SMTPFrom == "" { // for compatibility
 		SMTPFrom = SMTPAccount
 	}
@@ -86,17 +99,81 @@ func SendEmail(subject string, receiver string, content string) error {
 	if SMTPServer == "" && SMTPAccount == "" {
 		return fmt.Errorf("SMTP 服务器未配置")
 	}
-	encodedSubject := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(subject)))
-	mail := []byte(fmt.Sprintf("To: %s\r\n"+
-		"From: %s <%s>\r\n"+
-		"Subject: %s\r\n"+
-		"Date: %s\r\n"+
-		"Message-ID: %s\r\n"+ // 添加 Message-ID 头
-		"Content-Type: text/html; charset=UTF-8\r\n\r\n%s\r\n",
-		receiver, SystemName, SMTPFrom, encodedSubject, time.Now().Format(time.RFC1123Z), id, content))
+	recipients := strings.Split(receiver, ";")
+	for i := range recipients {
+		recipients[i] = strings.TrimSpace(recipients[i])
+	}
+	from := (&mail.Address{Name: SystemName, Address: SMTPFrom}).String()
+	encodedSubject := "=?UTF-8?B?" + base64.StdEncoding.EncodeToString([]byte(subject)) + "?="
+
+	var body bytes.Buffer
+	contentType := "text/html; charset=UTF-8"
+	contentTransferEncoding := "quoted-printable"
+	if plainText != "" {
+		writer := multipart.NewWriter(&body)
+		contentType = fmt.Sprintf("multipart/alternative; boundary=%q", writer.Boundary())
+		contentTransferEncoding = ""
+
+		plainHeader := make(textproto.MIMEHeader)
+		plainHeader.Set("Content-Type", "text/plain; charset=UTF-8")
+		plainHeader.Set("Content-Transfer-Encoding", "quoted-printable")
+		plainPart, err := writer.CreatePart(plainHeader)
+		if err != nil {
+			return err
+		}
+		plainEncoder := quotedprintable.NewWriter(plainPart)
+		if _, err = plainEncoder.Write([]byte(plainText)); err != nil {
+			return err
+		}
+		if err = plainEncoder.Close(); err != nil {
+			return err
+		}
+
+		htmlHeader := make(textproto.MIMEHeader)
+		htmlHeader.Set("Content-Type", "text/html; charset=UTF-8")
+		htmlHeader.Set("Content-Transfer-Encoding", "quoted-printable")
+		htmlPart, err := writer.CreatePart(htmlHeader)
+		if err != nil {
+			return err
+		}
+		htmlEncoder := quotedprintable.NewWriter(htmlPart)
+		if _, err = htmlEncoder.Write([]byte(htmlContent)); err != nil {
+			return err
+		}
+		if err = htmlEncoder.Close(); err != nil {
+			return err
+		}
+		if err = writer.Close(); err != nil {
+			return err
+		}
+	} else {
+		encoder := quotedprintable.NewWriter(&body)
+		if _, err := encoder.Write([]byte(htmlContent)); err != nil {
+			return err
+		}
+		if err := encoder.Close(); err != nil {
+			return err
+		}
+	}
+
+	var message bytes.Buffer
+	fmt.Fprintf(&message, "To: %s\r\n", strings.Join(recipients, ", "))
+	fmt.Fprintf(&message, "From: %s\r\n", from)
+	fmt.Fprintf(&message, "Subject: %s\r\n", encodedSubject)
+	fmt.Fprintf(&message, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
+	fmt.Fprintf(&message, "Message-ID: %s\r\n", id)
+	fmt.Fprint(&message, "MIME-Version: 1.0\r\n")
+	fmt.Fprintf(&message, "Content-Type: %s\r\n", contentType)
+	if contentTransferEncoding != "" {
+		fmt.Fprintf(&message, "Content-Transfer-Encoding: %s\r\n", contentTransferEncoding)
+	}
+	fmt.Fprint(&message, "\r\n")
+	message.Write(body.Bytes())
+	message.WriteString("\r\n")
+	mailData := message.Bytes()
+
 	auth := getSMTPAuth()
 	addr := fmt.Sprintf("%s:%d", SMTPServer, SMTPPort)
-	to := strings.Split(receiver, ";")
 	var err error
 	client, err := newSMTPClient(addr)
 	if err != nil {
@@ -111,7 +188,7 @@ func SendEmail(subject string, receiver string, content string) error {
 	if err = client.Mail(SMTPFrom); err != nil {
 		return err
 	}
-	for _, receiver := range to {
+	for _, receiver := range recipients {
 		if err = client.Rcpt(receiver); err != nil {
 			return err
 		}
@@ -120,7 +197,7 @@ func SendEmail(subject string, receiver string, content string) error {
 	if err != nil {
 		return err
 	}
-	_, err = w.Write(mail)
+	_, err = w.Write(mailData)
 	if err != nil {
 		return err
 	}

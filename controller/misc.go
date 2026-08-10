@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"strings"
 
@@ -284,11 +285,49 @@ func SendEmailVerification(c *gin.Context) {
 	}
 	code := common.GenerateVerificationCode(6)
 	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
-	subject := fmt.Sprintf("%s邮箱验证邮件", common.SystemName)
-	content := fmt.Sprintf("<p>您好，你正在进行%s邮箱验证。</p>"+
-		"<p>您的验证码为: <strong>%s</strong></p>"+
-		"<p>验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, code, common.VerificationValidMinutes)
-	err := common.SendEmail(subject, email, content)
+	escapedSystemName := html.EscapeString(common.SystemName)
+	escapedCode := html.EscapeString(code)
+	subject := fmt.Sprintf("[%s] 请完成邮箱验证", common.SystemName)
+	plainText := fmt.Sprintf("%s 邮箱验证\n\n您的验证码：%s\n\n验证码 %d 分钟内有效。若非本人操作，请忽略此邮件。",
+		common.SystemName, code, common.VerificationValidMinutes)
+	content := fmt.Sprintf(`<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>邮箱验证</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f6fa;color:#172033;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',Arial,sans-serif;">
+  <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" border="0" style="background:#f3f6fa;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;background:#ffffff;border:1px solid #dfe5ec;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background:#0d1728;padding:30px 32px;color:#ffffff;">
+              <div style="font-size:14px;color:#5dd6ff;margin-bottom:12px;">%s</div>
+              <div style="font-size:26px;font-weight:700;line-height:1.35;">请完成邮箱验证</div>
+              <div style="font-size:14px;color:#cbd5e1;margin-top:10px;">使用下方验证码完成本次注册</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 20px;font-size:15px;line-height:1.8;">您好，感谢您注册 %s。</p>
+              <div style="font-size:13px;color:#64748b;margin-bottom:8px;">邮箱验证码</div>
+              <div style="background:#111b2f;color:#ffffff;border-radius:8px;padding:18px 20px;text-align:center;font-size:30px;font-weight:700;letter-spacing:6px;">%s</div>
+              <p style="margin:20px 0 0;font-size:14px;line-height:1.8;color:#475569;">验证码将在 <strong>%d 分钟</strong>后失效，请勿将验证码转发给他人。</p>
+              <p style="margin:12px 0 0;font-size:13px;line-height:1.8;color:#64748b;">若您没有进行注册操作，可以忽略此邮件，账号不会受到影响。</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 32px;border-top:1px solid #e5eaf0;font-size:12px;line-height:1.7;color:#8792a2;">此邮件由 %s 自动发送，请勿直接回复。</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`, escapedSystemName, escapedSystemName, escapedCode, common.VerificationValidMinutes, escapedSystemName)
+	err := common.SendEmailWithPlainText(subject, email, plainText, content)
 	if err != nil {
 		common.ApiError(c, err)
 		return

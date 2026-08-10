@@ -1,0 +1,13 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]: 预言家 API
+  - generic [ref=e3]: 请完成邮箱验证
+  - generic [ref=e4]: 使用下方验证码完成本次注册
+  - paragraph [ref=e5]: 您好，感谢您注册 预言家 API。
+  - generic [ref=e6]: 邮箱验证码
+  - generic [ref=e7]: 6D40C8
+  - paragraph [ref=e8]:
+    - text: 验证码将在
+    - strong [ref=e9]: 10 分钟
+    - text: 后失效，请勿将验证码转发给他人。
+  - paragraph [ref=e10]: 若您没有进行注册操作，可以忽略此邮件，账号不会受到影响。
+  - text: 此邮件由 预言家 API 自动发送，请勿直接回复。

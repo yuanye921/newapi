@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -290,6 +291,37 @@ func TestSendEmailUsesExplicitStartTLSWithInsecureCertificate(t *testing.T) {
 	case message := <-server.messages:
 		require.Contains(t, message, "Subject: =?UTF-8?B?")
 		require.Contains(t, message, "<p>123456</p>")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for SMTP DATA")
+	}
+}
+
+func TestSendEmailWithPlainTextBuildsStandardsCompliantMultipartMessage(t *testing.T) {
+	server := newFakeSMTPServerWithSTARTTLSAdvertisement(t, false)
+	defer server.close()
+	withSMTPSettings(t)
+
+	SMTPServer = server.host
+	SMTPPort = server.port
+	SMTPSSLEnabled = false
+	SMTPStartTLSEnabled = false
+	SMTPAccount = "sender@example.com"
+	SMTPFrom = "sender@example.com"
+	SMTPToken = "secret"
+	SystemName = "预言家 API"
+
+	err := SendEmailWithPlainText("请完成邮箱验证", "receiver@example.com", "验证码：123456", "<p>验证码：<strong>123456</strong></p>")
+	require.NoError(t, err)
+
+	select {
+	case message := <-server.messages:
+		assert.Contains(t, message, "MIME-Version: 1.0")
+		assert.Contains(t, message, "Content-Type: multipart/alternative;")
+		assert.Contains(t, message, "Content-Type: text/plain; charset=UTF-8")
+		assert.Contains(t, message, "Content-Type: text/html; charset=UTF-8")
+		assert.Contains(t, strings.ToLower(message), "from: =?utf-8?")
+		assert.Contains(t, message, "Subject: =?UTF-8?")
+		assert.Contains(t, message, "123456")
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for SMTP DATA")
 	}
