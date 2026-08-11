@@ -287,7 +287,7 @@ func SendEmailVerification(c *gin.Context) {
 	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
 	escapedSystemName := html.EscapeString(common.SystemName)
 	escapedCode := html.EscapeString(code)
-	subject := fmt.Sprintf("[%s] 请完成邮箱验证", common.SystemName)
+	subject := fmt.Sprintf("【%s】请完成邮箱验证", common.SystemName)
 	plainText := fmt.Sprintf("%s 邮箱验证\n\n您的验证码：%s\n\n验证码 %d 分钟内有效。若非本人操作，请忽略此邮件。",
 		common.SystemName, code, common.VerificationValidMinutes)
 	content := fmt.Sprintf(`<!doctype html>
