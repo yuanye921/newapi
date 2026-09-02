@@ -156,14 +156,18 @@ The existing Expression pricing editor gains a pricing-unit choice:
 - Per-request: one USD request price for each tier.
 
 In per-request mode, token-price fields are hidden and each tier card displays a
-single `$/request` input. Existing tier conditions, AND/OR selection, fallback
-tier behavior, tier ordering, raw-expression editing, and request-rule
-multipliers remain available.
+single `$/request` input. Because the current visual editor only joins multiple
+conditions with `&&`, each non-fallback tier gains an explicit condition
+operator selector: "all conditions" generates `&&`, while "any condition"
+generates `||`. Fallback tier behavior, tier ordering, raw-expression editing,
+and request-rule multipliers remain available.
 
 The visual expression generator wraps each tier price in `request(...)`. The
 parser recognizes tiers whose bodies are `request(number)` and restores them as
-per-request visual configuration. Expressions that mix request and token costs
-without a lossless visual representation stay in raw-expression mode.
+per-request visual configuration. Homogeneous `&&` and `||` condition groups
+round-trip without changing their meaning. Expressions that mix request and
+token costs, or mix `&&` and `||` inside one tier without a lossless visual
+representation, stay in raw-expression mode.
 
 All new labels, descriptions, validation messages, and price units use the
 project i18n workflow for English, Simplified Chinese, Traditional Chinese,
