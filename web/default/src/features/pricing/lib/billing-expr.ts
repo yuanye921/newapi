@@ -364,25 +364,38 @@ function parseExprLiteral(raw: string): string | null {
   }
 }
 
+const TIME_FUNC_RANGES: Record<TimeFunc, [number, number]> = {
+  hour: [0, 23],
+  minute: [0, 59],
+  weekday: [0, 6],
+  month: [1, 12],
+  day: [1, 31],
+}
+
+function isTimeValueInRange(timeFunc: TimeFunc, text: string): boolean {
+  if (!NUMERIC_LITERAL_REGEX.test(text)) return false
+  const value = Number(text)
+  if (!Number.isInteger(value)) return false
+  const [min, max] = TIME_FUNC_RANGES[timeFunc]
+  return value >= min && value <= max
+}
+
 function tryParseTimeCondition(expr: string): RequestCondition | null {
   let m = expr.match(
-    /^(hour|minute|weekday|month|day)\("([^"]+)"\) >= ([\d.eE+-]+) \|\| \1\("\2"\) < ([\d.eE+-]+)$/
+    /^(hour|minute|weekday|month|day)\("([^"]+)"\) >= ([\d.eE+-]+) (?:&&|\|\|) \1\("\2"\) < ([\d.eE+-]+)$/
   )
-  if (m) {
-    return {
-      source: 'time',
-      timeFunc: m[1] as TimeFunc,
-      timezone: m[2],
-      mode: MATCH_RANGE,
-      value: '',
-      rangeStart: m[3],
-      rangeEnd: m[4],
-    }
+  if (!m) {
+    m = expr.match(
+      /^\((hour|minute|weekday|month|day)\("([^"]+)"\) >= ([\d.eE+-]+) (?:&&|\|\|) \1\("\2"\) < ([\d.eE+-]+)\)$/
+    )
   }
-  m = expr.match(
-    /^\((hour|minute|weekday|month|day)\("([^"]+)"\) >= ([\d.eE+-]+) \|\| \1\("\2"\) < ([\d.eE+-]+)\)$/
-  )
   if (m) {
+    if (
+      !isTimeValueInRange(m[1] as TimeFunc, m[3]) ||
+      !isTimeValueInRange(m[1] as TimeFunc, m[4])
+    ) {
+      return null
+    }
     return {
       source: 'time',
       timeFunc: m[1] as TimeFunc,
@@ -397,6 +410,7 @@ function tryParseTimeCondition(expr: string): RequestCondition | null {
     /^(hour|minute|weekday|month|day)\("([^"]+)"\) (==|>=|<) ([\d.eE+-]+)$/
   )
   if (m) {
+    if (!isTimeValueInRange(m[1] as TimeFunc, m[4])) return null
     const opMap: Record<string, string> = {
       '==': MATCH_EQ,
       '>=': MATCH_GTE,
@@ -473,6 +487,28 @@ function tryParseRequestCondition(expr: string): RequestCondition | null {
   return null
 }
 
+function tryParseTimeRangePair(
+  lower: string,
+  upper: string
+): RequestCondition | null {
+  const a = tryParseTimeCondition(lower)
+  const b = tryParseTimeCondition(upper)
+  if (!a || !b || a.source !== 'time' || b.source !== 'time') return null
+  const ta = a as TimeCondition
+  const tb = b as TimeCondition
+  if (ta.timeFunc !== tb.timeFunc || ta.timezone !== tb.timezone) return null
+  if (ta.mode !== MATCH_GTE || tb.mode !== MATCH_LT) return null
+  return {
+    source: 'time',
+    timeFunc: ta.timeFunc,
+    timezone: ta.timezone,
+    mode: MATCH_RANGE,
+    value: '',
+    rangeStart: ta.value,
+    rangeEnd: tb.value,
+  }
+}
+
 function tryParseRuleGroupFactor(part: string): RequestRuleGroup | null {
   const m = part.match(/^\((.+) \? ([\d.eE+-]+) : 1\)$/s)
   if (!m) return null
@@ -480,10 +516,23 @@ function tryParseRuleGroupFactor(part: string): RequestRuleGroup | null {
   const conditionStr = m[1]
   const multiplier = m[2]
 
+  const wholeTimeCondition = tryParseTimeCondition(conditionStr.trim())
+  if (wholeTimeCondition) {
+    return { conditions: [wholeTimeCondition], multiplier }
+  }
+
   const andParts = splitTopLevelAnd(conditionStr)
   const conditions: RequestCondition[] = []
-  for (const ap of andParts) {
-    const cond = tryParseRequestCondition(ap.trim())
+  for (let i = 0; i < andParts.length; i += 1) {
+    const part = andParts[i].trim()
+    const next = i + 1 < andParts.length ? andParts[i + 1].trim() : ''
+    const merged = next ? tryParseTimeRangePair(part, next) : null
+    if (merged) {
+      conditions.push(merged)
+      i += 1
+      continue
+    }
+    const cond = tryParseRequestCondition(part)
     if (!cond) return null
     conditions.push(cond)
   }
@@ -704,13 +753,16 @@ function buildTimeConditionExpr(cond: TimeCondition): string {
   if (mode === MATCH_RANGE) {
     const s = normalized.rangeStart.trim()
     const e = normalized.rangeEnd.trim()
-    if (!NUMERIC_LITERAL_REGEX.test(s) || !NUMERIC_LITERAL_REGEX.test(e)) {
+    if (!isTimeValueInRange(timeFunc, s) || !isTimeValueInRange(timeFunc, e)) {
       return ''
     }
-    return `${fn} >= ${s} || ${fn} < ${e}`
+    if (Number(s) > Number(e)) {
+      return `${fn} >= ${s} || ${fn} < ${e}`
+    }
+    return `${fn} >= ${s} && ${fn} < ${e}`
   }
   const v = normalized.value.trim()
-  if (!NUMERIC_LITERAL_REGEX.test(v)) return ''
+  if (!isTimeValueInRange(timeFunc, v)) return ''
   const opMap: Record<string, string> = {
     [MATCH_EQ]: '==',
     [MATCH_GTE]: '>=',
