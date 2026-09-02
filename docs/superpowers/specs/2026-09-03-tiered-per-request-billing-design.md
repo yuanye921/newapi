@@ -2,10 +2,12 @@
 
 ## Goal
 
-Add tiered per-request billing to the existing billing-expression system. A
-successful text request is charged exactly once. The charged USD amount is
-selected from usage tiers, where a tier may match either input context length
-or output token count, and the highest matching tier wins.
+Add tiered per-request billing to the existing billing-expression system and
+make time-based multipliers safe and observable. A successful text request is
+charged exactly once. The charged USD amount is selected from usage tiers,
+where a tier may match either input context length or output token count, and
+the highest matching tier wins. Optional time windows can then multiply that
+selected request price.
 
 The reference rule is:
 
@@ -69,8 +71,9 @@ reliably identifying per-request amounts.
   exactly as they apply to existing tiered expressions.
 - A request price of zero is allowed for deliberately free tiers. Negative,
   NaN, and infinite request prices are rejected.
-- Existing token-priced expressions and fixed `ModelPrice` per-request billing
-  retain their current meaning and results.
+- Existing token-price arithmetic and fixed `ModelPrice` per-request billing
+  retain their current meaning. Time rules use the corrected range and frozen
+  request-time semantics described below.
 
 ## Pre-Consume and Settlement Flow
 
@@ -104,6 +107,41 @@ request(price) -> float64
 The function accepts a finite, non-negative USD amount and returns a value in
 the existing expression cost scale. It can be wrapped by `tier()` and multiplied
 by existing request rules. Existing expressions compile and run unchanged.
+
+## Time-Based Multipliers
+
+Time rules remain request-rule multipliers appended to the base tier
+expression. They apply equally to token-priced tiers and the new per-request
+tiers. For example, doubling the selected request price from 09:00 until 12:00
+in Shanghai uses:
+
+```text
+(tier("base", request(0.15))) *
+(hour("Asia/Shanghai") >= 9 && hour("Asia/Shanghai") < 12 ? 2 : 1)
+```
+
+Time ranges have explicit boundary behavior:
+
+- `start < end` is a within-day window and uses `current >= start && current < end`.
+- `start > end` crosses midnight and uses `current >= start || current < end`.
+- `start == end` matches no time, preventing an accidental all-day multiplier.
+- Hour, minute, weekday, month, and day values must be integers inside their
+  natural domains: hour 0-23, minute 0-59, weekday 0-6, month 1-12, and day
+  1-31.
+- Multiple rule groups retain the existing multiplicative behavior. If two
+  windows overlap and both match, both multipliers apply.
+
+The pricing time is captured when the request enters billing and reused during
+settlement. `billingexpr.RequestInput` carries this evaluation timestamp, and
+the runtime time functions read it instead of calling the clock again. Direct
+callers that omit the timestamp retain the current-clock fallback. A response
+crossing a time boundary therefore cannot change price between pre-consume and
+final settlement.
+
+The visual editor labels this control as a general time range rather than an
+overnight-only range, explains the within-day versus across-midnight behavior,
+and preserves valid ranges through visual-to-expression round trips. Invalid
+raw ranges remain in raw mode instead of being silently rewritten.
 
 Configuration smoke tests include per-request values and reject invalid or
 non-finite outcomes before saving. Mixed raw expressions remain possible for
@@ -142,9 +180,11 @@ renders:
 - readable input-length and output-token conditions.
 
 The consume log continues to record `billing_mode`, the encoded frozen
-expression, and `matched_tier`. The existing log-details parser uses
-`request(...)` to show the actual tier as a per-request charge. No database
-migration or new log column is required.
+expression, and `matched_tier`. It also records the detected conditional
+multiplier rules and whether each one matched. The log-details view highlights
+the time or request conditions that actually changed the charge. The existing
+log-details parser uses `request(...)` to show the actual tier as a per-request
+charge. No database migration or new log column is required.
 
 Because pricing and settlement are shared above provider adapters, ordinary
 text requests from OpenAI Chat, Claude Messages, Gemini, and OpenAI Responses
@@ -159,12 +199,36 @@ change.
   not overwrite the last valid expression.
 - Settlement failures use the frozen pre-consume fallback already established
   by tiered billing.
-- Old expressions without `request()` remain byte-for-byte compatible in
-  meaning and output.
+- Old expressions without `request()` continue to compile. Their token-price
+  arithmetic is unchanged; only malformed visual time ranges and requests that
+  cross a time boundary receive the intentional corrections described above.
 - Pricing synchronization continues to use `ModelBillingMode` and
   `ModelBillingExpr`; no new database setting or migration is introduced.
 - Unknown expression syntax is preserved by the raw editor instead of being
   rewritten by the visual editor.
+
+## Selected Upstream Billing Fixes
+
+Only the following upstream billing changes are adapted to this customized
+branch. Their behavior is retained while paths and types are adjusted to the
+current local architecture:
+
+1. [`ac381ac`](https://github.com/QuantumNous/new-api/commit/ac381acf4bf41204b97bb26b4c58c83275877a2e)
+   fixes within-day time ranges that previously generated an
+   always-true OR expression. It also adds time-domain validation, parser
+   round-trip handling, UI guidance, translations, and regression tests.
+2. [`df43f80`](https://github.com/QuantumNous/new-api/commit/df43f80)
+   refreshes group-dependent tiered billing state before every
+   upstream retry. A retry that moves to a more expensive group raises the
+   reservation before sending; a move from a free group to a paid group starts
+   billing before that attempt. Final settlement uses the last selected group.
+3. [`4cf9107`](https://github.com/QuantumNous/new-api/commit/4cf9107)
+   records conditional multiplier traces and highlights matched rules in usage
+   logs.
+
+The repository is not wholesale-upgraded to the latest upstream release as
+part of this feature. Experimental task plugins, broad quota-type migrations,
+database migrations, and unrelated provider changes remain outside scope.
 
 ## Test Strategy
 
@@ -175,6 +239,10 @@ Backend tests are written first and cover:
 - base tier, every threshold boundary, OR semantics, and highest-tier priority;
 - pre-consume estimates and actual settlement differences;
 - group-ratio scaling, frozen snapshots, and saturation safety;
+- a time captured at request start remaining stable across settlement;
+- same-day, overnight, equal-bound, invalid-bound, and multi-window time rules;
+- tiered retries reserving and settling against the final selected group;
+- matched and unmatched conditional multiplier traces in consume logs;
 - unchanged results for existing token-priced expressions.
 
 Frontend tests are written first and cover:
@@ -182,6 +250,9 @@ Frontend tests are written first and cover:
 - parsing and generating per-request visual tiers;
 - preserving OR conditions and fallback tiers through a round trip;
 - refusing lossy visual conversion for mixed expressions;
+- same-day and overnight time-range generation, parsing, validation, and
+  round-trip stability;
+- matched time-rule presentation in usage-log details;
 - public pricing breakdowns and `$ / request` formatting.
 
 Verification runs focused Go and frontend tests first, followed by `go test
@@ -195,3 +266,4 @@ and the production build.
 - Per-channel copies of the same pricing rule.
 - Changes to non-text billing flows.
 - A database migration or a second tiered billing configuration store.
+- A wholesale upstream release merge or unrelated upstream fixes.
