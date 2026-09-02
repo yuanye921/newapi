@@ -47,10 +47,10 @@ func TestRequestPriceUsesExistingCostScale(t *testing.T) {
 }
 
 func TestRequestPriceTierBoundaries(t *testing.T) {
-    expr := `tier("500k", request(0.5), len >= 500000 || c >= 20000) +
-             tier("400k", request(0.4), len >= 400000 || c >= 16000) +
-             tier("300k", request(0.3), len >= 300000 || c >= 12000) +
-             tier("200k", request(0.2), len >= 200000 || c >= 8000) +
+    expr := `len >= 500000 || c >= 20000 ? tier("500k", request(0.5)) :
+             len >= 400000 || c >= 16000 ? tier("400k", request(0.4)) :
+             len >= 300000 || c >= 12000 ? tier("300k", request(0.3)) :
+             len >= 200000 || c >= 8000 ? tier("200k", request(0.2)) :
              tier("base", request(0.15))`
     tests := []struct {
         name string
