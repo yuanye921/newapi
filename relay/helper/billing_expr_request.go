@@ -2,6 +2,7 @@ package helper
 
 import (
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -21,7 +22,7 @@ func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.Re
 		return input, nil
 	}
 
-	input := billingexpr.RequestInput{}
+	input := billingexpr.RequestInput{EvaluatedAt: time.Now().UTC()}
 	if info != nil {
 		input.Headers = cloneStringMap(info.RequestHeaders)
 	}
@@ -36,7 +37,8 @@ func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.Re
 
 func BuildBillingExprRequestInputFromRequest(request dto.Request, headers map[string]string) (billingexpr.RequestInput, error) {
 	input := billingexpr.RequestInput{
-		Headers: cloneStringMap(headers),
+		Headers:     cloneStringMap(headers),
+		EvaluatedAt: time.Now().UTC(),
 	}
 	if request == nil {
 		return input, nil
@@ -63,7 +65,8 @@ func readIncomingBillingExprBody(c *gin.Context) ([]byte, error) {
 
 func cloneRequestInput(src billingexpr.RequestInput) billingexpr.RequestInput {
 	input := billingexpr.RequestInput{
-		Headers: cloneStringMap(src.Headers),
+		Headers:     cloneStringMap(src.Headers),
+		EvaluatedAt: src.EvaluatedAt,
 	}
 	if len(src.Body) > 0 {
 		input.Body = append([]byte(nil), src.Body...)

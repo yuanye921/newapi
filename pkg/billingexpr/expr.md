@@ -134,6 +134,35 @@ tier("base", p * 5 + c * 25)|||when(header("anthropic-beta") has "fast-mode") * 
 
 These are parsed and applied separately by the request rule system.
 
+### Request Rule Tracing
+
+At compile time, the engine instruments ternary factors with this exact shape:
+
+```text
+<request-probe condition> ? <numeric literal> : 1
+```
+
+The condition must reference `param`, `header`, `hour`, `minute`, `weekday`,
+`month`, or `day`. Both branches must be numeric literals and the fallback must
+equal `1`; other conditionals keep their normal behavior but are not traced.
+Integer-only factors use an integer-preserving callback, so operators such as
+`%` keep their original type. The internal `_trace` and `_trace_int` names are
+reserved.
+
+Each run receives its own copy of the compiled rule list. Matching callbacks
+mark their rule without mutating the cache; short-circuited and false rules stay
+unmatched. Settlement writes the ordered trace to `request_rules` in the consume
+log so the frontend displays what the server actually charged instead of
+re-evaluating time in the browser.
+
+### Frozen Request Time
+
+Billing captures one `EvaluatedAt` timestamp when it first builds the request
+input. All time helpers reuse that timestamp during pre-consume, retries, and
+settlement. Direct expression callers that omit it retain the current-clock
+fallback. A request crossing a time boundary therefore cannot change its price
+between reservation and final settlement.
+
 ---
 
 ## Architecture
