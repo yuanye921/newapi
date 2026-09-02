@@ -87,6 +87,12 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 			return nil, newAPIErrorFromParamOverride(err)
 		}
 	}
+	if info.ChannelSetting.PrefillCompatibilityEnabled {
+		chatJSON, _, err = relaycommon.ApplyPrefillCompatibilityJSON(chatJSON, types.RelayFormatOpenAI)
+		if err != nil {
+			return nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+	}
 
 	var overriddenChatReq dto.GeneralOpenAIRequest
 	if err := common.Unmarshal(chatJSON, &overriddenChatReq); err != nil {
@@ -126,6 +132,12 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 	jsonData, err = relaycommon.RemoveDisabledFields(jsonData, info.ChannelOtherSettings, info.ChannelSetting.PassThroughBodyEnabled)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
+	if info.ChannelSetting.PrefillCompatibilityEnabled {
+		jsonData, _, err = relaycommon.ApplyPrefillCompatibilityJSON(jsonData, info.GetFinalRequestRelayFormat())
+		if err != nil {
+			return nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
 	}
 
 	body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
