@@ -12,7 +12,7 @@ The expression is the billing contract between the administrator and the system.
 
 2. **Variables are opt-in** — `p` (prompt) and `c` (completion) are the base. Cache (`cr`, `cc`, `cc1h`), image (`img`), and audio (`ai`, `ao`) variables are optional. If omitted, those tokens are included in `p`/`c` and priced at their rate. The system automatically detects which variables the expression uses (via AST introspection) and adjusts token normalization accordingly.
 
-3. **Prices are real prices** — Expression coefficients are actual $/1M tokens prices as published by providers. No ratio conversion, no `/2` convention. `p * 2.5` means $2.50 per 1M prompt tokens.
+3. **Prices are real prices** — Token coefficients are actual $/1M tokens prices as published by providers. `p * 2.5` means $2.50 per 1M prompt tokens. `request(0.15)` means $0.15 for one request.
 
 4. **Upstream-agnostic** — The expression doesn't need to know whether the upstream API is OpenAI-format (prompt_tokens includes cache) or Claude-format (input_tokens excludes cache). The system normalizes token counts before evaluation based on the upstream response format.
 
@@ -76,6 +76,7 @@ Powered by [expr-lang/expr](https://github.com/expr-lang/expr). Expressions are 
 | Function | Signature | Purpose |
 |----------|-----------|---------|
 | `tier` | `tier(name, value) → float64` | Records which pricing tier matched; must wrap the cost expression |
+| `request` | `request(price) → float64` | Converts one non-negative USD request price to the v1 million-unit cost scale |
 | `param` | `param(path) → any` | Reads a JSON path from the request body (uses gjson) |
 | `header` | `header(key) → string` | Reads a request header value |
 | `has` | `has(source, substr) → bool` | Substring check |
@@ -106,7 +107,22 @@ tier("base", p * 2 + c * 8 + img * 2.5)
 
 # Multimodal with audio
 tier("base", p * 0.43 + c * 3.06 + img * 0.78 + ai * 3.81 + ao * 15.11)
+
+# Per-request tiers — the highest matching tier is written first
+len >= 500000 || c >= 20000 ? tier("tier_5", request(0.5)) :
+len >= 400000 || c >= 16000 ? tier("tier_4", request(0.4)) :
+len >= 300000 || c >= 12000 ? tier("tier_3", request(0.3)) :
+len >= 200000 || c >= 8000  ? tier("tier_2", request(0.2)) :
+tier("base", request(0.15))
 ```
+
+`request(price)` accepts zero or a finite positive USD amount. It returns the
+same v1 million-unit cost scale used by token expressions, so group ratios,
+checked quota rounding, saturation auditing, pre-consume, and settlement keep
+using the existing conversion path. Advanced raw expressions may combine
+`request()` with token arithmetic; the visual editor keeps mixed-unit
+expressions in raw mode because converting them into one price form would lose
+meaning.
 
 ### Request Rules (appended after `|||`)
 
