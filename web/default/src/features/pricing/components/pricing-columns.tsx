@@ -185,7 +185,9 @@ export function usePricingColumns(
                 ))}
               </span>
               <div className='text-muted-foreground/50 text-[10px]'>
-                / {tokenUnitLabel} tokens
+                {primaryEntries.some((entry) => entry.unit === 'request')
+                  ? `/ ${t('request')}`
+                  : `/ ${tokenUnitLabel} tokens`}
                 {dynamicSummary.tierCount > 1 &&
                   ` · ${t('{{count}} tiers', {
                     count: dynamicSummary.tierCount,

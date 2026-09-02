@@ -669,7 +669,7 @@ function PriceSection(props: {
                 <div className='text-foreground mt-1 font-mono text-base font-semibold tabular-nums'>
                   {entry.formatted}
                   <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
-                    / {tokenUnitLabel}
+                    / {entry.unit === 'request' ? t('request') : tokenUnitLabel}
                   </span>
                 </div>
               </div>
@@ -694,7 +694,8 @@ function PriceSection(props: {
                   <span className='text-muted-foreground font-mono text-sm tabular-nums'>
                     {entry.formatted}
                     <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
-                      / {tokenUnitLabel}
+                      /{' '}
+                      {entry.unit === 'request' ? t('request') : tokenUnitLabel}
                     </span>
                   </span>
                 </div>
@@ -1017,9 +1018,16 @@ function GroupPricingSection(props: {
               </div>
             )
           })}
-          <p className='text-muted-foreground/40 mt-1.5 text-[10px]'>
-            {t('Prices shown per')} {tokenUnitLabel} tokens
-          </p>
+          <div className='text-muted-foreground/40 mt-1.5 space-y-0.5 text-[10px]'>
+            {priceFields.some((entry) => entry.unit === 'token') && (
+              <p>
+                {t('Prices shown per')} {tokenUnitLabel} tokens
+              </p>
+            )}
+            {priceFields.some((entry) => entry.unit === 'request') && (
+              <p>{t('Prices shown per request')}</p>
+            )}
+          </div>
         </div>
       </section>
     )

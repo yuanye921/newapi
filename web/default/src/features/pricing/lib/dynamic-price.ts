@@ -45,7 +45,8 @@ export type DynamicPriceEntry = {
   shortLabel: string
   value: number
   formatted: string
-  variable: BillingVar
+  variable: BillingVar | null
+  unit: 'token' | 'request'
 }
 
 export type DynamicPricingSummary = {
@@ -60,7 +61,11 @@ export type DynamicPricingSummary = {
   secondaryEntries: DynamicPriceEntry[]
 }
 
-const PRIMARY_DYNAMIC_FIELDS = new Set(['inputPrice', 'outputPrice'])
+const PRIMARY_DYNAMIC_FIELDS = new Set([
+  'requestPrice',
+  'inputPrice',
+  'outputPrice',
+])
 
 export function isDynamicPricingModel(model: PricingModel): boolean {
   return model.billing_mode === 'tiered_expr' && Boolean(model.billing_expr)
@@ -107,6 +112,28 @@ export function formatDynamicUnitPrice(
   })
 }
 
+export function formatDynamicRequestPrice(
+  valuePerRequest: number,
+  options: DynamicPriceOptions
+): string {
+  const groupRatio = options.groupRatioMultiplier ?? 1
+  const priceRate = options.priceRate ?? 1
+  const usdExchangeRate = options.usdExchangeRate ?? 1
+  const priceUSD = valuePerRequest * groupRatio
+  const displayPrice = applyRechargeRate(
+    priceUSD,
+    options.showRechargePrice ?? false,
+    priceRate,
+    usdExchangeRate
+  )
+
+  return formatBillingCurrencyFromUSD(displayPrice, {
+    digitsLarge: 4,
+    digitsSmall: 6,
+    abbreviate: false,
+  })
+}
+
 export function getDynamicPricingTiers(model: PricingModel): ParsedTier[] {
   if (!isDynamicPricingModel(model)) return []
   const { billingExpr } = splitBillingExprAndRequestRules(
@@ -129,6 +156,22 @@ export function getDynamicPriceEntries(
 ): DynamicPriceEntry[] {
   if (!tier) return []
 
+  const requestPrice = Number(tier.requestPrice)
+  if (Number.isFinite(requestPrice) && requestPrice > 0) {
+    return [
+      {
+        key: 'request',
+        field: 'requestPrice',
+        label: 'Request price',
+        shortLabel: 'Request price',
+        value: requestPrice,
+        formatted: formatDynamicRequestPrice(requestPrice, options),
+        variable: null,
+        unit: 'request',
+      },
+    ]
+  }
+
   return BILLING_PRICING_VARS.flatMap((variable) => {
     if (!variable.field) return []
     const value = Number(tier[variable.field])
@@ -143,6 +186,7 @@ export function getDynamicPriceEntries(
         value,
         formatted: formatDynamicUnitPrice(value, options),
         variable,
+        unit: 'token' as const,
       },
     ]
   }).sort((a, b) => {

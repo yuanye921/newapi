@@ -92,6 +92,12 @@ export interface ChannelAffinityInfo {
   using_group?: string
 }
 
+export type RequestRuleTrace = {
+  cond: string
+  multiplier: number
+  matched: boolean
+}
+
 export const USAGE_BILLING_PATH = {
   LOCAL: 'local',
   UPSTREAM: 'upstream',
@@ -187,6 +193,7 @@ export interface LogOtherData {
   billing_mode?: string
   expr_b64?: string
   matched_tier?: string
+  request_rules?: RequestRuleTrace[]
   reasoning_effort?: string
   image?: boolean
   image_ratio?: number

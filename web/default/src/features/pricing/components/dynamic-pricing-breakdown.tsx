@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 
 import { StaticDataTable } from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
+import type { RequestRuleTrace } from '@/features/usage-logs/types'
 import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
@@ -64,6 +65,8 @@ type DynamicPricingBreakdownProps = {
    * icon header and uses the dialog's small text sizes. Defaults to false.
    */
   compact?: boolean
+  /** Frozen backend rule results for usage logs. Expression-only pages omit it. */
+  requestRules?: RequestRuleTrace[]
 }
 
 const VAR_LABELS: Record<string, string> = {
@@ -99,6 +102,7 @@ function formatTokenHint(value: string | number): string {
 
 function formatConditionSummary(
   conditions: TierCondition[],
+  conditionLogic: ParsedTier['conditionLogic'],
   t: (key: string) => string
 ): string {
   return conditions
@@ -108,7 +112,7 @@ function formatConditionSummary(
       return `${varLabel} ${OP_LABELS[c.op] || c.op} ${hint || c.value}`
     })
     .filter(Boolean)
-    .join(' && ')
+    .join(conditionLogic === 'or' ? ' || ' : ' && ')
 }
 
 function describeCondition(
@@ -158,6 +162,7 @@ export function DynamicPricingBreakdown({
   matchedTierLabel,
   hideCacheColumns = false,
   compact = false,
+  requestRules,
 }: DynamicPricingBreakdownProps) {
   const { t } = useTranslation()
   const expr = billingExpr || ''
@@ -187,7 +192,8 @@ export function DynamicPricingBreakdown({
   }, [expr])
 
   const hasTiers = tiers.length > 0
-  const hasRules = ruleGroups.length > 0
+  const hasRules =
+    requestRules === undefined ? ruleGroups.length > 0 : requestRules.length > 0
   const normalizedMatchedTierLabel = normalizeTierLabel(
     matchedTierLabel ?? undefined
   )
@@ -222,13 +228,33 @@ export function DynamicPricingBreakdown({
     )
   }
 
-  const visiblePriceFields = BILLING_PRICING_VARS.filter((v) => {
-    if (!hasTiers) return false
-    if (hideCacheColumns && v.group === 'cache') return false
-    return tiers.some(
-      (tier) => Number(tier[v.field as string as keyof ParsedTier] || 0) > 0
-    )
-  })
+  const visiblePriceFields: Array<{
+    field: string
+    shortLabel: string
+    unit: 'token' | 'request'
+  }> = []
+  if (tiers.some((tier) => Number(tier.requestPrice) > 0)) {
+    visiblePriceFields.push({
+      field: 'requestPrice',
+      shortLabel: 'Request price',
+      unit: 'request',
+    })
+  }
+  for (const variable of BILLING_PRICING_VARS) {
+    if (!variable.field) continue
+    if (hideCacheColumns && variable.group === 'cache') continue
+    if (
+      tiers.some(
+        (tier) => Number(tier[variable.field as keyof ParsedTier] || 0) > 0
+      )
+    ) {
+      visiblePriceFields.push({
+        field: variable.field,
+        shortLabel: variable.shortLabel,
+        unit: 'token',
+      })
+    }
+  }
 
   return (
     <section className={cn('min-w-0', !compact && 'py-3 sm:py-4')}>
@@ -260,15 +286,19 @@ export function DynamicPricingBreakdown({
             {t('Tiered price table')}
           </div>
           <div className='space-y-1.5 sm:hidden'>
-            {tiers.map((tier, i) => {
-              const condSummary = formatConditionSummary(tier.conditions, t)
+            {tiers.map((tier) => {
+              const condSummary = formatConditionSummary(
+                tier.conditions,
+                tier.conditionLogic,
+                t
+              )
               const isMatched =
                 matchedTierLabel != null &&
                 matchedTierLabel !== '' &&
                 tier.label === matchedTierLabel
               return (
                 <div
-                  key={`tier-mobile-${i}`}
+                  key={`tier-mobile-${tier.label}-${condSummary}`}
                   className={cn(
                     'rounded-md border p-2',
                     isMatched && 'border-emerald-500/40 bg-emerald-500/10'
@@ -352,7 +382,11 @@ export function DynamicPricingBreakdown({
                 ),
                 cellClassName: cn('align-top', compact ? 'py-2' : 'py-2.5'),
                 cell: (tier) => {
-                  const condSummary = formatConditionSummary(tier.conditions, t)
+                  const condSummary = formatConditionSummary(
+                    tier.conditions,
+                    tier.conditionLogic,
+                    t
+                  )
                   const isMatched =
                     normalizedMatchedTierLabel !== '' &&
                     normalizeTierLabel(tier.label) ===
@@ -424,29 +458,63 @@ export function DynamicPricingBreakdown({
           >
             {t('Conditional multipliers')}
           </div>
-          <ul className='space-y-1.5'>
-            {ruleGroups.map((group, gi) => (
-              <li
-                key={`group-${gi}`}
-                className='bg-muted/50 flex items-center justify-between gap-3 rounded-md px-3 py-2'
-              >
-                <span
+          {requestRules === undefined ? (
+            <ul className='space-y-1.5'>
+              {ruleGroups.map((group) => (
+                <li
+                  key={`${describeGroup(group, t)}-${group.multiplier}`}
+                  className='bg-muted/50 flex items-center justify-between gap-3 rounded-md px-3 py-2'
+                >
+                  <span
+                    className={cn(
+                      'text-foreground break-all',
+                      compact ? 'text-xs' : 'text-sm'
+                    )}
+                  >
+                    {describeGroup(group, t)}
+                  </span>
+                  <Badge
+                    variant='secondary'
+                    className='shrink-0 bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300'
+                  >
+                    {group.multiplier}x
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className='space-y-1.5'>
+              {requestRules.map((rule) => (
+                <li
+                  key={`${rule.cond}-${rule.multiplier}-${rule.matched}`}
                   className={cn(
-                    'text-foreground break-all',
-                    compact ? 'text-xs' : 'text-sm'
+                    'flex items-center justify-between gap-3 rounded-md border px-3 py-2',
+                    rule.matched
+                      ? 'border-emerald-500/40 bg-emerald-500/10'
+                      : 'bg-muted/30'
                   )}
                 >
-                  {describeGroup(group, t)}
-                </span>
-                <Badge
-                  variant='secondary'
-                  className='shrink-0 bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300'
-                >
-                  {group.multiplier}x
-                </Badge>
-              </li>
-            ))}
-          </ul>
+                  <code
+                    className={cn(
+                      'break-all',
+                      rule.matched
+                        ? 'text-emerald-700 dark:text-emerald-300'
+                        : 'text-muted-foreground',
+                      compact ? 'text-xs' : 'text-sm'
+                    )}
+                  >
+                    {rule.cond}
+                  </code>
+                  <div className='flex shrink-0 items-center gap-1.5'>
+                    <Badge variant={rule.matched ? 'default' : 'secondary'}>
+                      {rule.matched ? t('Matched') : t('Not matched')}
+                    </Badge>
+                    <Badge variant='secondary'>{rule.multiplier}x</Badge>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </section>

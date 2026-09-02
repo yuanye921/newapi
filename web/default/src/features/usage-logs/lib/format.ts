@@ -230,7 +230,12 @@ export function resolveMatchedTier(
 export interface TieredBillingSummary {
   tiers: ParsedTier[]
   tier: ParsedTier
-  priceEntries: Array<{ field: string; shortLabel: string; price: number }>
+  priceEntries: Array<{
+    field: string
+    shortLabel: string
+    price: number
+    unit: 'token' | 'request'
+  }>
 }
 
 /**
@@ -263,6 +268,15 @@ export function getTieredBillingSummary(
   const cacheTokensPresent = hasAnyCacheTokens(other)
 
   const priceEntries: TieredBillingSummary['priceEntries'] = []
+  const requestPrice = Number(tier.requestPrice)
+  if (Number.isFinite(requestPrice) && requestPrice > 0) {
+    priceEntries.push({
+      field: 'requestPrice',
+      shortLabel: 'Request price',
+      price: requestPrice,
+      unit: 'request',
+    })
+  }
   for (const v of BILLING_PRICING_VARS) {
     if (!v.field) continue
     if (v.group === 'cache' && !cacheTokensPresent) continue
@@ -273,6 +287,7 @@ export function getTieredBillingSummary(
         field: v.field,
         shortLabel: v.shortLabel,
         price,
+        unit: 'token',
       })
     }
   }

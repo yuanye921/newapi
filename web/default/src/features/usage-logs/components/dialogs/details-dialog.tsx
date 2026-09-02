@@ -179,7 +179,9 @@ function getUsageBillingPathLabel(
   }
 }
 
-function isUsageBillingPathLocal(adminInfo: LogOtherData['admin_info']): boolean {
+function isUsageBillingPathLocal(
+  adminInfo: LogOtherData['admin_info']
+): boolean {
   if (adminInfo?.usage_billing_path) {
     return adminInfo.usage_billing_path === USAGE_BILLING_PATH.LOCAL
   }
@@ -227,7 +229,9 @@ function BillingBreakdown(props: {
       for (const entry of tieredSummary.priceEntries) {
         rows.push({
           label: t(entry.shortLabel),
-          value: `${fmtPrice(entry.price)}/M`,
+          value: `${fmtPrice(entry.price)}/${
+            entry.unit === 'request' ? t('request') : 'M'
+          }`,
         })
       }
     } else {
@@ -1061,6 +1065,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
               billingExpr={decodeBillingExprB64(other.expr_b64)}
               matchedTierLabel={other.matched_tier}
               hideCacheColumns={!hasAnyCacheTokens(other)}
+              requestRules={other.request_rules}
             />
           </DetailSection>
         )}

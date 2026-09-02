@@ -87,6 +87,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
     Math.max(groups.length - 1, 0) +
     Math.max(endpoints.length - 2, 0) +
     Math.max(tags.length - 2, 0)
+  const displayedPriceUnit = dynamicSummary?.primaryEntries.some(
+    (entry) => entry.unit === 'request'
+  )
+    ? t('Per request')
+    : tokenUnitLabel
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -268,7 +273,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             </span>
           ))}
           <span className='text-muted-foreground/50 text-xs'>
-            {tokenUnitLabel}
+            {displayedPriceUnit}
           </span>
           {hiddenCount > 0 && (
             <span className='text-muted-foreground/40 text-xs'>
