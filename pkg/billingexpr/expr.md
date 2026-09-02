@@ -204,7 +204,11 @@ When a request arrives and the model uses `tiered_expr` billing:
 2. Builds `RequestInput` (headers + body) for `param()` / `header()` functions
 3. Runs expression with estimated tokens: `RunExprWithRequest(expr, {P, C}, requestInput)`
 4. Converts output to quota: `rawCost / 1,000,000 * QuotaPerUnit`
-5. Creates `BillingSnapshot` (frozen state for settlement) and stores on `RelayInfo`
+5. Creates `BillingSnapshot` and stores it on `RelayInfo`. Expression and
+   request state stay frozen. Before each auto-group retry, only the selected
+   group ratio and estimated group quota are refreshed. A more expensive retry
+   reserves the difference before the upstream request; moving from an initial
+   free group to a paid group creates the billing session at that point.
 
 ### 4. Settlement (Actual Billing)
 
@@ -218,7 +222,7 @@ After the upstream response returns with actual token usage:
    - For Claude-format APIs (input_tokens is text-only): no adjustment needed
 
 2. `TryTieredSettle(relayInfo, params)`:
-   - Uses the frozen `BillingSnapshot` from pre-consume
+   - Uses the captured `BillingSnapshot` with the final selected group's refreshed ratio
    - Re-runs the expression with actual token counts
    - Converts via `quotaConversion()` (version-dispatched)
    - Returns actual quota
