@@ -24,6 +24,7 @@ import {
   CACHE_MODE_GENERIC,
   evalExprLocally,
   generateExprFromVisualConfig,
+  setVisualPricingUnit,
   tryParseVisualConfig,
   type ExtraTokenValues,
   type VisualConfig,
@@ -117,6 +118,39 @@ describe('per-request visual tiers', () => {
 })
 
 describe('visual tier compatibility', () => {
+  test('switches pricing units without losing either price configuration', () => {
+    const tokenConfig: VisualConfig = {
+      pricing_unit: 'token',
+      tiers: [
+        {
+          label: 'base',
+          conditions: [],
+          input_unit_cost: 3,
+          output_unit_cost: 15,
+          cache_mode: CACHE_MODE_GENERIC,
+        },
+      ],
+    }
+
+    const requestMode = setVisualPricingUnit(tokenConfig, 'request')
+    assert.equal(requestMode.pricing_unit, 'request')
+    assert.equal(requestMode.tiers[0].request_price, 0)
+    assert.equal(requestMode.tiers[0].input_unit_cost, 3)
+    assert.equal(requestMode.tiers[0].output_unit_cost, 15)
+
+    const tokenMode = setVisualPricingUnit(
+      {
+        ...requestMode,
+        tiers: [{ ...requestMode.tiers[0], request_price: 0.15 }],
+      },
+      'token'
+    )
+    assert.equal(tokenMode.pricing_unit, 'token')
+    assert.equal(tokenMode.tiers[0].request_price, 0.15)
+    assert.equal(tokenMode.tiers[0].input_unit_cost, 3)
+    assert.equal(tokenMode.tiers[0].output_unit_cost, 15)
+  })
+
   test('keeps existing token tier generation unchanged', () => {
     const config: VisualConfig = {
       pricing_unit: 'token',

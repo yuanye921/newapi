@@ -126,6 +126,16 @@ export function normalizeVisualConfig(
   }
 }
 
+export function setVisualPricingUnit(
+  config: VisualConfig | null | undefined,
+  pricingUnit: PricingUnit
+): VisualConfig {
+  return normalizeVisualConfig({
+    ...normalizeVisualConfig(config),
+    pricing_unit: pricingUnit,
+  })
+}
+
 function buildConditionStr(tier: VisualTier): string {
   const { conditions } = tier
   if (!conditions || conditions.length === 0) return ''

@@ -85,8 +85,11 @@ import {
 import {
   CACHE_MODE_GENERIC,
   CACHE_MODE_TIMED,
+  PRICING_UNIT_REQUEST,
+  PRICING_UNIT_TOKEN,
   type CacheMode,
   type ExtraTokenValues,
+  type PricingUnit,
   type TierConditionInput,
   type VisualConfig,
   type VisualTier,
@@ -97,6 +100,7 @@ import {
   getTierCacheMode,
   normalizeVisualConfig,
   normalizeVisualTier,
+  setVisualPricingUnit,
   tryParseVisualConfig,
 } from '@/features/pricing/lib/tier-expr'
 import { cn } from '@/lib/utils'
@@ -540,6 +544,7 @@ function PriceField({ label, hint, value, onChange }: PriceFieldProps) {
 
 type VisualTierCardProps = {
   tier: VisualTier
+  pricingUnit: PricingUnit
   index: number
   total: number
   onChange: (next: VisualTier) => void
@@ -549,6 +554,7 @@ type VisualTierCardProps = {
 
 function VisualTierCard({
   tier,
+  pricingUnit,
   index,
   total,
   onChange,
@@ -649,16 +655,52 @@ function VisualTierCard({
       <div className='space-y-1.5'>
         <div className='flex h-7 items-center justify-between'>
           <Label className='text-xs font-medium'>{t('Tier conditions')}</Label>
-          <Button
-            variant='ghost'
-            size='sm'
-            onClick={onAddCondition}
-            disabled={tier.conditions.length >= 2}
-            className='h-7 px-2 text-xs'
-          >
-            <Plus className='mr-1 h-3 w-3' />
-            {t('Add condition')}
-          </Button>
+          <div className='flex items-center gap-2'>
+            {tier.conditions.length >= 2 && (
+              <Select
+                items={[
+                  { value: 'and', label: t('All conditions (AND)') },
+                  { value: 'or', label: t('Any condition (OR)') },
+                ]}
+                value={tier.condition_logic ?? 'and'}
+                onValueChange={(value) =>
+                  value !== null &&
+                  onChange({
+                    ...tier,
+                    condition_logic: value === 'or' ? 'or' : 'and',
+                  })
+                }
+              >
+                <SelectTrigger className='w-44' size='sm'>
+                  <SelectValue>
+                    {tier.condition_logic === 'or'
+                      ? t('Any condition (OR)')
+                      : t('All conditions (AND)')}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    <SelectItem value='and'>
+                      {t('All conditions (AND)')}
+                    </SelectItem>
+                    <SelectItem value='or'>
+                      {t('Any condition (OR)')}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            )}
+            <Button
+              variant='ghost'
+              size='sm'
+              onClick={onAddCondition}
+              disabled={tier.conditions.length >= 2}
+              className='h-7 px-2 text-xs'
+            >
+              <Plus className='mr-1 h-3 w-3' />
+              {t('Add condition')}
+            </Button>
+          </div>
         </div>
         {tier.conditions.length === 0 ? (
           <p className='text-muted-foreground text-xs'>
@@ -676,91 +718,120 @@ function VisualTierCard({
         )}
       </div>
 
-      <div className='space-y-2'>
-        <div className='flex items-center justify-between gap-3'>
-          <Label className='text-sm font-semibold'>{t('Token prices')}</Label>
-          <span className='bg-muted text-muted-foreground rounded-md px-2 py-1 text-xs'>
-            {PRICE_SUFFIX}
-          </span>
-        </div>
-
-        <div className='space-y-3'>
-          <div className='flex flex-wrap gap-x-4 gap-y-2'>
-            <PriceField
-              label={t('Input price')}
-              value={inputUnitPrice}
-              onChange={(value) =>
-                handlePriceChange('input_unit_cost', priceToUnitCost(value))
-              }
-            />
-            <PriceField
-              label={t('Output price')}
-              value={outputUnitPrice}
-              onChange={(value) =>
-                handlePriceChange('output_unit_cost', priceToUnitCost(value))
-              }
-            />
+      {pricingUnit === PRICING_UNIT_REQUEST ? (
+        <div className='space-y-2'>
+          <div className='flex items-center justify-between gap-3'>
+            <Label className='text-sm font-semibold'>
+              {t('Request price')}
+            </Label>
+            <span className='bg-muted text-muted-foreground rounded-md px-2 py-1 text-xs'>
+              {t('$/request')}
+            </span>
           </div>
-
-          <div className='space-y-2'>
-            <div className='flex h-7 items-center'>
-              <Tabs
-                value={cacheMode}
-                onValueChange={(value) =>
-                  value !== null && handleCacheModeChange(value as CacheMode)
-                }
-              >
-                <TabsList className='h-8'>
-                  <TabsTrigger
-                    value={CACHE_MODE_GENERIC}
-                    className='px-2 text-xs'
-                  >
-                    {t('Generic cache')}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value={CACHE_MODE_TIMED}
-                    className='px-2 text-xs'
-                  >
-                    {t('Time-sliced cache (Claude)')}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-            <div className='flex flex-wrap gap-x-4 gap-y-2'>
-              {CACHE_PRICE_VARS.map((variable) => {
-                if (variable.key === 'cc1h' && cacheMode !== CACHE_MODE_TIMED) {
-                  return null
-                }
-                return renderPriceVariable(variable)
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Media prices */}
-      <div className='space-y-1.5'>
-        <Button
-          type='button'
-          variant='ghost'
-          size='sm'
-          className='h-7 px-2 text-xs'
-          onClick={() => setMediaOpen((prev) => !prev)}
-        >
-          <ChevronDown
-            className={cn(
-              'mr-1 h-3 w-3 transition-transform',
-              mediaOpen && 'rotate-180'
-            )}
+          <PriceField
+            label={t('Price')}
+            value={tier.request_price ?? 0}
+            onChange={(value) => handlePriceChange('request_price', value)}
           />
-          {t('Media pricing')}
-        </Button>
-        {mediaOpen && (
-          <div className='flex flex-wrap gap-x-4 gap-y-2'>
-            {MEDIA_PRICE_VARS.map(renderPriceVariable)}
+        </div>
+      ) : (
+        <>
+          <div className='space-y-2'>
+            <div className='flex items-center justify-between gap-3'>
+              <Label className='text-sm font-semibold'>
+                {t('Token prices')}
+              </Label>
+              <span className='bg-muted text-muted-foreground rounded-md px-2 py-1 text-xs'>
+                {PRICE_SUFFIX}
+              </span>
+            </div>
+
+            <div className='space-y-3'>
+              <div className='flex flex-wrap gap-x-4 gap-y-2'>
+                <PriceField
+                  label={t('Input price')}
+                  value={inputUnitPrice}
+                  onChange={(value) =>
+                    handlePriceChange('input_unit_cost', priceToUnitCost(value))
+                  }
+                />
+                <PriceField
+                  label={t('Output price')}
+                  value={outputUnitPrice}
+                  onChange={(value) =>
+                    handlePriceChange(
+                      'output_unit_cost',
+                      priceToUnitCost(value)
+                    )
+                  }
+                />
+              </div>
+
+              <div className='space-y-2'>
+                <div className='flex h-7 items-center'>
+                  <Tabs
+                    value={cacheMode}
+                    onValueChange={(value) =>
+                      value !== null &&
+                      handleCacheModeChange(value as CacheMode)
+                    }
+                  >
+                    <TabsList className='h-8'>
+                      <TabsTrigger
+                        value={CACHE_MODE_GENERIC}
+                        className='px-2 text-xs'
+                      >
+                        {t('Generic cache')}
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value={CACHE_MODE_TIMED}
+                        className='px-2 text-xs'
+                      >
+                        {t('Time-sliced cache (Claude)')}
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+                <div className='flex flex-wrap gap-x-4 gap-y-2'>
+                  {CACHE_PRICE_VARS.map((variable) => {
+                    if (
+                      variable.key === 'cc1h' &&
+                      cacheMode !== CACHE_MODE_TIMED
+                    ) {
+                      return null
+                    }
+                    return renderPriceVariable(variable)
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Media prices */}
+          <div className='space-y-1.5'>
+            <Button
+              type='button'
+              variant='ghost'
+              size='sm'
+              className='h-7 px-2 text-xs'
+              onClick={() => setMediaOpen((prev) => !prev)}
+            >
+              <ChevronDown
+                className={cn(
+                  'mr-1 h-3 w-3 transition-transform',
+                  mediaOpen && 'rotate-180'
+                )}
+              />
+              {t('Media pricing')}
+            </Button>
+            {mediaOpen && (
+              <div className='flex flex-wrap gap-x-4 gap-y-2'>
+                {MEDIA_PRICE_VARS.map(renderPriceVariable)}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -780,6 +851,10 @@ function VisualEditor({ visualConfig, onChange }: VisualEditorProps) {
     () => normalizeVisualConfig(visualConfig),
     [visualConfig]
   )
+
+  const handlePricingUnitChange = (pricingUnit: PricingUnit) => {
+    onChange(setVisualPricingUnit(config, pricingUnit))
+  }
 
   const handleTierChange = (index: number, next: VisualTier) => {
     const tiers = [...config.tiers]
@@ -842,6 +917,37 @@ function VisualEditor({ visualConfig, onChange }: VisualEditorProps) {
 
   return (
     <div className='space-y-2'>
+      <div className='flex flex-wrap items-center gap-3'>
+        <Label className='text-sm font-medium'>{t('Pricing unit')}</Label>
+        <Select
+          items={[
+            { value: PRICING_UNIT_TOKEN, label: t('Per 1M tokens') },
+            { value: PRICING_UNIT_REQUEST, label: t('Per request') },
+          ]}
+          value={config.pricing_unit}
+          onValueChange={(value) =>
+            value !== null && handlePricingUnitChange(value as PricingUnit)
+          }
+        >
+          <SelectTrigger className='w-44' size='sm'>
+            <SelectValue>
+              {config.pricing_unit === PRICING_UNIT_REQUEST
+                ? t('Per request')
+                : t('Per 1M tokens')}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              <SelectItem value={PRICING_UNIT_TOKEN}>
+                {t('Per 1M tokens')}
+              </SelectItem>
+              <SelectItem value={PRICING_UNIT_REQUEST}>
+                {t('Per request')}
+              </SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
       <p className='text-muted-foreground text-xs'>
         {t(
           'Each tier supports up to 2 conditions. The last tier without conditions is the fallback.'
@@ -851,6 +957,7 @@ function VisualEditor({ visualConfig, onChange }: VisualEditorProps) {
         <VisualTierCard
           key={index}
           tier={tier}
+          pricingUnit={config.pricing_unit}
           index={index}
           total={config.tiers.length}
           onChange={(next) => handleTierChange(index, next)}
@@ -896,7 +1003,8 @@ function RawExprEditor({ exprString, onChange }: RawExprEditorProps) {
             {t('Functions')}: <code>tier(name, value)</code>, <code>max</code>,{' '}
             <code>min</code>, <code>ceil</code>, <code>floor</code>,{' '}
             <code>abs</code>, <code>header(name)</code>,{' '}
-            <code>param(path)</code>, <code>has(source, text)</code>
+            <code>param(path)</code>, <code>has(source, text)</code>,{' '}
+            <code>request(price)</code>
           </div>
         </AlertDescription>
       </Alert>
@@ -946,7 +1054,7 @@ function RuleConditionRow({
       case MATCH_LTE:
         return t('Less than or equal')
       case MATCH_RANGE:
-        return t('Overnight range')
+        return t('Time range')
       default:
         return mode
     }
@@ -1180,6 +1288,11 @@ function RuleConditionRow({
       >
         <Trash2 className='text-destructive h-4 w-4' />
       </Button>
+      {condition.source === SOURCE_TIME && condition.mode === MATCH_RANGE && (
+        <p className='text-muted-foreground basis-full text-xs'>
+          {t('Start ≤ end stays within the day; start > end crosses midnight.')}
+        </p>
+      )}
     </div>
   )
 }
