@@ -234,9 +234,13 @@ export type TierCondition = {
   value: number
 }
 
+export type TierConditionLogic = 'and' | 'or'
+
 export type ParsedTier = {
   label: string
   conditions: TierCondition[]
+  conditionLogic: TierConditionLogic
+  requestPrice?: number
   [field: string]: unknown
 }
 
@@ -251,7 +255,16 @@ function stripExprVersion(exprStr: string): { version: number; body: string } {
   return { version: 1, body: exprStr }
 }
 
-function parseTierBody(bodyStr: string): Record<string, number> {
+function parseTierBody(bodyStr: string): Record<string, number> | null {
+  const requestMatch = bodyStr
+    .trim()
+    .match(/^request\(\s*(-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*\)$/)
+  if (requestMatch) {
+    const requestPrice = Number(requestMatch[1])
+    if (!Number.isFinite(requestPrice) || requestPrice < 0) return null
+    return { requestPrice }
+  }
+
   const coeffs: Record<string, number> = {}
   const re = new RegExp(BILLING_VAR_REGEX.source, 'g')
   let m
@@ -265,39 +278,111 @@ function parseTierBody(bodyStr: string): Record<string, number> {
   return tier
 }
 
+function parseTierConditions(conditionStr: string): {
+  conditions: TierCondition[]
+  conditionLogic: TierConditionLogic
+} | null {
+  const trimmed = conditionStr.trim()
+  if (!trimmed) return { conditions: [], conditionLogic: 'and' }
+
+  const parts = trimmed.split(/\s*(&&|\|\|)\s*/)
+  const conditionParts = parts.filter((_, index) => index % 2 === 0)
+  const operators = parts.filter((_, index) => index % 2 === 1)
+  if (new Set(operators).size > 1) return null
+
+  const conditions: TierCondition[] = []
+  for (const part of conditionParts) {
+    const match = part
+      .trim()
+      .match(
+        /^(p|c|len)\s*(<=|>=|<|>)\s*(-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)$/
+      )
+    if (!match) return null
+    const value = Number(match[3])
+    if (!Number.isFinite(value)) return null
+    conditions.push({
+      var: match[1] as TierCondition['var'],
+      op: match[2] as TierCondition['op'],
+      value,
+    })
+  }
+
+  return {
+    conditions,
+    conditionLogic: operators[0] === '||' ? 'or' : 'and',
+  }
+}
+
+function findMatchingParen(expr: string, openIndex: number): number {
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let index = openIndex; index < expr.length; index += 1) {
+    const char = expr[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+    if (char === '"') {
+      inString = true
+      continue
+    }
+    if (char === '(') depth += 1
+    if (char === ')') {
+      depth -= 1
+      if (depth === 0) return index
+    }
+  }
+  return -1
+}
+
 export function parseTiersFromExpr(exprStr: string): ParsedTier[] {
   if (!exprStr) return []
   try {
     const { body } = stripExprVersion(exprStr)
-    const condGroup =
-      `((?:(?:p|c|len)\\s*(?:<|<=|>|>=)\\s*[\\d.eE+]+)` +
-      `(?:\\s*&&\\s*(?:p|c|len)\\s*(?:<|<=|>|>=)\\s*[\\d.eE+]+)*)`
-    const tierRe = new RegExp(
-      `(?:${condGroup}\\s*\\?\\s*)?tier\\("([^"]*)",\\s*([^)]+)\\)`,
-      'g'
-    )
     const tiers: ParsedTier[] = []
-    let m
-    while ((m = tierRe.exec(body)) !== null) {
-      const condStr = m[1] || ''
-      const conditions: TierCondition[] = []
-      if (condStr) {
-        for (const cp of condStr.split(/\s*&&\s*/)) {
-          const cm = cp.trim().match(/^(p|c|len)\s*(<|<=|>|>=)\s*([\d.eE+]+)$/)
-          if (cm) {
-            conditions.push({
-              var: cm[1] as TierCondition['var'],
-              op: cm[2] as TierCondition['op'],
-              value: Number(cm[3]),
-            })
-          }
+    let cursor = 0
+    while (cursor < body.length) {
+      const tierStart = body.indexOf('tier(', cursor)
+      if (tierStart < 0) break
+
+      const prefix = body.slice(cursor, tierStart).trim()
+      let conditionStr = ''
+      if (tiers.length === 0) {
+        if (prefix) {
+          if (!prefix.endsWith('?')) return []
+          conditionStr = prefix.slice(0, -1).trim()
         }
+      } else if (prefix !== ':') {
+        if (!prefix.startsWith(':') || !prefix.endsWith('?')) return []
+        conditionStr = prefix.slice(1, -1).trim()
       }
-      const tier = parseTierBody(m[3]) as ParsedTier
-      tier.label = m[2]
-      tier.conditions = conditions
-      tiers.push(tier)
+
+      const callHead = body.slice(tierStart).match(/^tier\(\s*"([^"]*)"\s*,\s*/)
+      if (!callHead) return []
+      const openIndex = tierStart + body.slice(tierStart).indexOf('(')
+      const closeIndex = findMatchingParen(body, openIndex)
+      if (closeIndex < 0) return []
+      const tierBodyStart = tierStart + callHead[0].length
+      const tierBody = parseTierBody(body.slice(tierBodyStart, closeIndex))
+      const parsedConditions = parseTierConditions(conditionStr)
+      if (!tierBody || !parsedConditions) return []
+
+      tiers.push({
+        ...tierBody,
+        label: callHead[1],
+        conditions: parsedConditions.conditions,
+        conditionLogic: parsedConditions.conditionLogic,
+      } as ParsedTier)
+      cursor = closeIndex + 1
     }
+    if (body.slice(cursor).trim()) return []
     return tiers
   } catch {
     return []

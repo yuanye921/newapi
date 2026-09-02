@@ -16,11 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { BILLING_CACHE_VAR_MAP } from './billing-expr'
+import {
+  BILLING_CACHE_VAR_MAP,
+  BILLING_PRICING_VARS,
+  parseTiersFromExpr,
+  type TierConditionLogic,
+} from './billing-expr'
 
 export const CACHE_MODE_TIMED = 'timed'
 export const CACHE_MODE_GENERIC = 'generic'
 export type CacheMode = typeof CACHE_MODE_TIMED | typeof CACHE_MODE_GENERIC
+export const PRICING_UNIT_TOKEN = 'token'
+export const PRICING_UNIT_REQUEST = 'request'
+export type PricingUnit =
+  | typeof PRICING_UNIT_TOKEN
+  | typeof PRICING_UNIT_REQUEST
 
 export type TierConditionInput = {
   var: 'p' | 'c' | 'len'
@@ -31,6 +41,8 @@ export type TierConditionInput = {
 export type VisualTier = {
   label: string
   conditions: TierConditionInput[]
+  condition_logic?: TierConditionLogic
+  request_price?: number
   input_unit_cost: number
   output_unit_cost: number
   cache_mode: CacheMode
@@ -45,6 +57,7 @@ export type VisualTier = {
 }
 
 export type VisualConfig = {
+  pricing_unit: PricingUnit
   tiers: VisualTier[]
 }
 
@@ -61,6 +74,7 @@ export function getTierCacheMode(
 export function normalizeVisualTier(
   tier: Partial<VisualTier> = {}
 ): VisualTier {
+  const requestPrice = Number(tier.request_price)
   return {
     label: tier.label ?? '',
     input_unit_cost: Number(tier.input_unit_cost) || 0,
@@ -68,6 +82,9 @@ export function normalizeVisualTier(
     cache_mode: getTierCacheMode(tier),
     conditions: Array.isArray(tier.conditions) ? tier.conditions : [],
     ...tier,
+    condition_logic: tier.condition_logic === 'or' ? 'or' : 'and',
+    request_price:
+      Number.isFinite(requestPrice) && requestPrice >= 0 ? requestPrice : 0,
     cache_read_unit_cost: Number(tier.cache_read_unit_cost) || 0,
     cache_create_unit_cost: Number(tier.cache_create_unit_cost) || 0,
     cache_create_1h_unit_cost: Number(tier.cache_create_1h_unit_cost) || 0,
@@ -80,6 +97,7 @@ export function normalizeVisualTier(
 
 export function createDefaultVisualConfig(): VisualConfig {
   return {
+    pricing_unit: PRICING_UNIT_TOKEN,
     tiers: [
       normalizeVisualTier({
         conditions: [],
@@ -100,19 +118,31 @@ export function normalizeVisualConfig(
   }
   return {
     ...config,
+    pricing_unit:
+      config.pricing_unit === PRICING_UNIT_REQUEST
+        ? PRICING_UNIT_REQUEST
+        : PRICING_UNIT_TOKEN,
     tiers: config.tiers.map((tier) => normalizeVisualTier(tier)),
   }
 }
 
-function buildConditionStr(conditions: TierConditionInput[]): string {
+function buildConditionStr(tier: VisualTier): string {
+  const { conditions } = tier
   if (!conditions || conditions.length === 0) return ''
+  const separator = tier.condition_logic === 'or' ? ' || ' : ' && '
   return conditions
     .filter((c) => c.var && c.op && c.value != null && c.value !== '')
     .map((c) => `${c.var} ${c.op} ${c.value}`)
-    .join(' && ')
+    .join(separator)
 }
 
-function buildTierBodyExpr(tier: VisualTier): string {
+function buildTierBodyExpr(tier: VisualTier, pricingUnit: PricingUnit): string {
+  if (pricingUnit === PRICING_UNIT_REQUEST) {
+    const requestPrice = Number(tier.request_price)
+    const safePrice =
+      Number.isFinite(requestPrice) && requestPrice >= 0 ? requestPrice : 0
+    return `request(${safePrice})`
+  }
   const parts: string[] = []
   const ic = Number(tier.input_unit_cost) || 0
   const oc = Number(tier.output_unit_cost) || 0
@@ -131,15 +161,21 @@ export function generateExprFromVisualConfig(
   if (!config || !config.tiers || config.tiers.length === 0) {
     return 'p * 0 + c * 0'
   }
+  const pricingUnit =
+    config.pricing_unit === PRICING_UNIT_REQUEST
+      ? PRICING_UNIT_REQUEST
+      : PRICING_UNIT_TOKEN
   const tiers = config.tiers
 
   if (tiers.length === 1) {
     const tier = tiers[0]
     const label = tier.label || 'default'
-    const body = `tier("${label}", ${buildTierBodyExpr(tier)})`
-    const cond = buildConditionStr(tier.conditions)
+    const body = `tier("${label}", ${buildTierBodyExpr(tier, pricingUnit)})`
+    const cond = buildConditionStr(tier)
     if (cond) {
-      return `${cond} ? ${body} : p * 0 + c * 0`
+      const fallback =
+        pricingUnit === PRICING_UNIT_REQUEST ? 'request(0)' : 'p * 0 + c * 0'
+      return `${cond} ? ${body} : ${fallback}`
     }
     return body
   }
@@ -148,8 +184,8 @@ export function generateExprFromVisualConfig(
   for (let i = 0; i < tiers.length; i++) {
     const tier = tiers[i]
     const label = tier.label || `tier_${i + 1}`
-    const body = `tier("${label}", ${buildTierBodyExpr(tier)})`
-    const cond = buildConditionStr(tier.conditions)
+    const body = `tier("${label}", ${buildTierBodyExpr(tier, pricingUnit)})`
+    const cond = buildConditionStr(tier)
 
     if (i < tiers.length - 1 && cond) {
       parts.push(`${cond} ? ${body}`)
@@ -168,71 +204,35 @@ export function tryParseVisualConfig(
     let body = exprStr
     const versionMatch = body.match(/^v\d+:([\s\S]*)$/)
     if (versionMatch) body = versionMatch[1]
-    const cacheVarNames = BILLING_CACHE_VAR_MAP.map((cv) => cv.exprVar)
-    const optCacheStr = cacheVarNames
-      .map((v) => `(?:\\s*\\+\\s*${v}\\s*\\*\\s*([\\d.eE+-]+))?`)
-      .join('')
+    const parsedTiers = parseTiersFromExpr(body)
+    if (parsedTiers.length === 0) return null
 
-    const bodyPat = `p\\s*\\*\\s*([\\d.eE+-]+)\\s*\\+\\s*c\\s*\\*\\s*([\\d.eE+-]+)${optCacheStr}`
-
-    const singleRe = new RegExp(`^tier\\("([^"]*)",\\s*${bodyPat}\\)$`)
-    const simple = body.match(singleRe)
-    if (simple) {
-      const tier: Record<string, unknown> = {
-        conditions: [],
-        input_unit_cost: Number(simple[2]),
-        output_unit_cost: Number(simple[3]),
-        label: simple[1],
-      }
-      BILLING_CACHE_VAR_MAP.forEach((cv, i) => {
-        const val = simple[4 + i]
-        if (val != null) tier[cv.field] = Number(val)
-      })
-      return normalizeVisualConfig({
-        tiers: [normalizeVisualTier(tier as Partial<VisualTier>)],
-      })
+    const requestTierCount = parsedTiers.filter(
+      (tier) => tier.requestPrice != null
+    ).length
+    if (requestTierCount !== 0 && requestTierCount !== parsedTiers.length) {
+      return null
     }
+    const pricingUnit =
+      requestTierCount === parsedTiers.length
+        ? PRICING_UNIT_REQUEST
+        : PRICING_UNIT_TOKEN
 
-    const condGroup =
-      `((?:(?:p|c|len)\\s*(?:<|<=|>|>=)\\s*[\\d.eE+]+)` +
-      `(?:\\s*&&\\s*(?:p|c|len)\\s*(?:<|<=|>|>=)\\s*[\\d.eE+]+)*)`
-    const tierRe = new RegExp(
-      `(?:${condGroup}\\s*\\?\\s*)?tier\\("([^"]*)",\\s*${bodyPat}\\)`,
-      'g'
-    )
-    const tiers: VisualTier[] = []
-    let match: RegExpExecArray | null
-    while ((match = tierRe.exec(body)) !== null) {
-      const condStr = match[1] || ''
-      const conditions: TierConditionInput[] = []
-      if (condStr) {
-        for (const cp of condStr.split(/\s*&&\s*/)) {
-          const cm = cp.trim().match(/^(p|c|len)\s*(<|<=|>|>=)\s*([\d.eE+]+)$/)
-          if (cm) {
-            conditions.push({
-              var: cm[1] as TierConditionInput['var'],
-              op: cm[2] as TierConditionInput['op'],
-              value: Number(cm[3]),
-            })
-          }
-        }
-      }
+    const tiers = parsedTiers.map((parsedTier) => {
       const tier: Record<string, unknown> = {
-        conditions,
-        input_unit_cost: Number(match[3]),
-        output_unit_cost: Number(match[4]),
-        label: match[2],
+        label: parsedTier.label,
+        conditions: parsedTier.conditions,
+        condition_logic: parsedTier.conditionLogic,
+        request_price: parsedTier.requestPrice ?? 0,
       }
-      const m = match
-      BILLING_CACHE_VAR_MAP.forEach((cv, i) => {
-        const val = m[5 + i]
-        if (val != null) tier[cv.field] = Number(val)
-      })
-      tiers.push(normalizeVisualTier(tier as Partial<VisualTier>))
-    }
-    if (tiers.length === 0) return null
+      for (const variable of BILLING_PRICING_VARS) {
+        if (!variable.field || !variable.tierField) continue
+        tier[variable.tierField] = Number(parsedTier[variable.field]) || 0
+      }
+      return normalizeVisualTier(tier as Partial<VisualTier>)
+    })
 
-    const cfg = normalizeVisualConfig({ tiers })
+    const cfg = normalizeVisualConfig({ pricing_unit: pricingUnit, tiers })
     const regenerated = generateExprFromVisualConfig(cfg)
     if (regenerated.replace(/\s+/g, '') !== body.replace(/\s+/g, '')) {
       return null
@@ -293,6 +293,7 @@ export function evalExprLocally(
       c: completionTokens,
       len,
       tier: tierFn,
+      request: (price: number) => price * 1_000_000,
       max: Math.max,
       min: Math.min,
       abs: Math.abs,
