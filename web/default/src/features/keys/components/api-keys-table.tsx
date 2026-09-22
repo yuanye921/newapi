@@ -18,9 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
-import type { Table as TanstackTable } from '@tanstack/react-table'
+import type {
+  OnChangeFn,
+  SortingState,
+  Table as TanstackTable,
+} from '@tanstack/react-table'
 import { Database } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -52,7 +56,7 @@ import {
   API_KEY_STATUSES,
   ERROR_MESSAGES,
 } from '../constants'
-import type { ApiKey } from '../types'
+import type { ApiKey, ApiKeySortBy } from '../types'
 import { ApiKeyCell } from './api-keys-cells'
 import { useApiKeysColumns } from './api-keys-columns'
 import { useApiKeys } from './api-keys-provider'
@@ -65,6 +69,15 @@ const API_KEYS_MOBILE_SKELETON_IDS = Array.from(
   { length: 5 },
   (_, index) => `api-key-mobile-skeleton-${index + 1}`
 )
+const API_KEY_SORTABLE_COLUMNS = new Set<ApiKeySortBy>([
+  'name',
+  'status',
+  'quota',
+  'group',
+  'created_time',
+  'accessed_time',
+  'expired_time',
+])
 
 function isDisabledApiKeyRow(apiKey: ApiKey) {
   return apiKey.status !== API_KEY_STATUS.ENABLED
@@ -190,6 +203,7 @@ export function ApiKeysTable() {
   const { t } = useTranslation()
   const { refreshTrigger } = useApiKeys()
   const [now, setNow] = useState(() => Date.now())
+  const [sorting, setSorting] = useState<SortingState>([])
   const columns = useApiKeysColumns(now)
 
   useEffect(() => {
@@ -230,6 +244,28 @@ export function ApiKeysTable() {
   })
   const shouldSearch = Boolean(globalFilter?.trim() || tokenFilter.trim())
 
+  const sortParams = useMemo(() => {
+    const activeSort = sorting[0]
+    if (
+      !activeSort ||
+      !API_KEY_SORTABLE_COLUMNS.has(activeSort.id as ApiKeySortBy)
+    ) {
+      return {}
+    }
+
+    return {
+      sort_by: activeSort.id as ApiKeySortBy,
+      sort_order: activeSort.desc ? 'desc' : 'asc',
+    } as const
+  }, [sorting])
+
+  const handleSortingChange: OnChangeFn<SortingState> = (updater) => {
+    setSorting(updater)
+    if (pagination.pageIndex > 0) {
+      onPaginationChange({ ...pagination, pageIndex: 0 })
+    }
+  }
+
   // Fetch data with React Query
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const { data, isLoading, isFetching } = useQuery({
@@ -239,6 +275,7 @@ export function ApiKeysTable() {
       pagination.pageSize,
       globalFilter,
       tokenFilter,
+      sortParams,
       refreshTrigger,
     ],
     queryFn: async () => {
@@ -248,10 +285,12 @@ export function ApiKeysTable() {
             token: tokenFilter,
             p: pagination.pageIndex + 1,
             size: pagination.pageSize,
+            ...sortParams,
           })
         : await getApiKeys({
             p: pagination.pageIndex + 1,
             size: pagination.pageSize,
+            ...sortParams,
           })
 
       if (!result.success) {
@@ -280,6 +319,7 @@ export function ApiKeysTable() {
     data: apiKeys,
     columns,
     enableRowSelection: true,
+    sorting,
     columnFilters,
     columnVisibilityStorageKey: API_KEYS_COLUMN_VISIBILITY_STORAGE_KEY,
     globalFilter,
@@ -288,7 +328,9 @@ export function ApiKeysTable() {
     onPaginationChange,
     onGlobalFilterChange,
     onColumnFiltersChange,
+    onSortingChange: handleSortingChange,
     manualPagination: true,
+    manualSorting: true,
     totalCount: data?.total || 0,
     ensurePageInRange,
   })
